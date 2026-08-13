@@ -1,0 +1,130 @@
+@import "tailwindcss";
+@plugin "daisyui" {
+  themes: tegaki --default;
+}
+
+/*
+  테가키카타 디자인 토큰
+  ─────────────────────
+  모티프: 원고지/한자 연습장의 다지선다형 칸(田字格) 그리드.
+  색: 화지(washi) 종이 바탕 + 먹(sumi) 잉크 + 남색 藍色(정답/포커스) + 주색 朱色(오답/교정 표시).
+  실제 한자 연습장에서 붉은 펜으로 첨삭하고 남색/먹으로 정답을 표시하는 관습을 색상 의미에 반영.
+*/
+@plugin "daisyui/theme" {
+  name: "tegaki";
+  default: true;
+  prefersdark: false;
+  color-scheme: light;
+
+  --color-base-100: #f2efe3;
+  --color-base-200: #e6e2d0;
+  --color-base-300: #d5d0b8;
+  --color-base-content: #1d1c18;
+
+  --color-primary: #2f5288;
+  --color-primary-content: #f2efe3;
+
+  --color-secondary: #b83b2c;
+  --color-secondary-content: #f2efe3;
+
+  --color-accent: #a9843f;
+  --color-accent-content: #1d1c18;
+
+  --color-neutral: #1d1c18;
+  --color-neutral-content: #f2efe3;
+
+  --color-info: #2f5288;
+  --color-info-content: #f2efe3;
+  --color-success: #4b6c4b;
+  --color-success-content: #f2efe3;
+  --color-warning: #a9843f;
+  --color-warning-content: #1d1c18;
+  --color-error: #b83b2c;
+  --color-error-content: #f2efe3;
+
+  --radius-selector: 0.25rem;
+  --radius-field: 0.25rem;
+  --radius-box: 0.5rem;
+  --border: 1.5px;
+}
+
+@theme {
+  --font-display: "Elice Digital Baeum", "Hiragino Kaku Gothic ProN", "Yu Gothic",
+    "Malgun Gothic", sans-serif;
+  --font-body: "Elice Digital Baeum", "Hiragino Kaku Gothic ProN", "Yu Gothic",
+    "Malgun Gothic", sans-serif;
+  --font-data: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+  --font-japanese: "Yu Mincho", "YuMincho", "Hiragino Mincho ProN", "Noto Serif JP", serif;
+}
+
+@font-face {
+  font-family: "Elice Digital Baeum";
+  src: url("/fonts/EliceDigitalBaeum_Regular.ttf") format("truetype");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Elice Digital Baeum";
+  src: url("/fonts/EliceDigitalBaeum_Bold.ttf") format("truetype");
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
+
+body {
+  font-family: var(--font-body);
+  background-image:
+    linear-gradient(var(--color-base-300) 1px, transparent 1px),
+    linear-gradient(90deg, var(--color-base-300) 1px, transparent 1px);
+  background-size: 28px 28px;
+  background-position: -1px -1px;
+  background-attachment: fixed;
+}
+
+.font-display {
+  font-family: var(--font-display);
+  font-weight: 700;
+}
+
+.font-data {
+  font-family: var(--font-data);
+}
+
+/* 실제 일본어 단어(한자/읽기)를 표시하는 곳에만 사용 — UI 텍스트에는 쓰지 않는다. */
+.font-jp {
+  font-family: var(--font-japanese);
+}
+
+/* 田字格 — 한자 연습장의 십자 보조선. 필기 캔버스의 시그니처 프레임. */
+/* 원고지 칸 틀 — 기본 틀과 십자 보조선을 분리해서, 필요한 곳에서만 십자선을 켠다. */
+.genko-frame {
+  position: relative;
+  background-color: #faf8f0;
+  border: 1.5px solid var(--color-base-300);
+}
+
+.genko-frame-cross::before,
+.genko-frame-cross::after {
+  content: "";
+  position: absolute;
+  z-index: 0;
+  background-color: var(--color-base-300);
+}
+
+.genko-frame-cross::before {
+  left: 50%;
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  transform: translateX(-0.5px);
+}
+
+.genko-frame-cross::after {
+  top: 50%;
+  left: 0;
+  right: 0;
+  height: 1px;
+  transform: translateY(-0.5px);
+}

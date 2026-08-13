@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>테가키카타 · Tegakikata</title>
+  </head>
+  <body>
+    <div id="root"></div>
+    <!--
+      kanjicanvas는 npm 패키지가 아닌 순수 클라이언트 스크립트라 정적 파일로 직접 로드한다.
+      원본: https://github.com/asdfjkl/kanjicanvas (public/vendor/kanjicanvas/ 아래 복사됨)
+      ref-patterns.js가 window.KanjiCanvas를 참조하므로 kanji-canvas.min.js보다 반드시 뒤에 와야 한다.
+    -->
+    <!-- Google Identity Services — Drive OAuth 토큰 발급용 -->
+    <script src="https://accounts.google.com/gsi/client" async defer></script>
+    <script src="/vendor/kanjicanvas/kanji-canvas.min.js"></script>
+    <script src="/vendor/kanjicanvas/ref-patterns.js"></script>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>
