@@ -6,6 +6,9 @@ import { useEffect, useMemo, useState } from 'react';
 import { Button } from '../components/common/Button';
 import { FeedbackBanner } from '../components/common/FeedbackBanner';
 import { ProgressStat } from '../components/common/ProgressStat';
+import { HandwritingFrame } from '../components/handwriting/HandwritingFrame';
+import { CandidateChips } from '../components/game/fill-blank/CandidateChips';
+import { HiraganaKeyboard } from '../components/game/fill-blank/HiraganaKeyboard';
 import { useAppConfig } from '../hooks/useAppConfig';
 import { useGrammarNotes } from '../hooks/useGrammarNotes';
 import { useWordBank } from '../hooks/useWordBank';
@@ -49,6 +52,12 @@ export function TranslateGamePage({ progress, onExit }: TranslateGamePageProps) 
   const [result, setResult] = useState<TranslateGradeResult | null>(null);
   const [grading, setGrading] = useState(false);
   const [gradeError, setGradeError] = useState<string | null>(null);
+
+  // 일반 타이핑 외에, 한자 필기/히라가나 버튼으로도 답을 이어 쓸 수 있게 하는 보조 입력기.
+  const [handwritingOpen, setHandwritingOpen] = useState(false);
+  const [candidates, setCandidates] = useState<string[]>([]);
+  const [canvasKey, setCanvasKey] = useState(0);
+  const appendToAnswer = (char: string) => setAnswer((prev) => prev + char);
 
   const [correctCount, setCorrectCount] = useState(0);
   const [answeredCount, setAnsweredCount] = useState(0);
@@ -99,6 +108,8 @@ export function TranslateGamePage({ progress, onExit }: TranslateGamePageProps) 
     setWordIndex((i) => i + Math.max(1, questionWords.length));
     setAnswer('');
     setResult(null);
+    setCandidates([]);
+    setCanvasKey((k) => k + 1);
   };
 
   if (!hasRequiredApiKey(config)) {
@@ -192,6 +203,38 @@ export function TranslateGamePage({ progress, onExit }: TranslateGamePageProps) 
                 placeholder="ここに書いてください"
               />
             </label>
+
+            {result === null && (
+              <div className="flex flex-col items-center gap-3">
+                <Button variant="ghost" size="sm" onClick={() => setHandwritingOpen((v) => !v)}>
+                  {handwritingOpen ? '한자/히라가나 입력기 닫기' : '✏️ 한자/히라가나 입력기로 이어 쓰기'}
+                </Button>
+
+                {handwritingOpen && (
+                  <div className="flex w-full flex-col items-center gap-4 rounded-[var(--radius-box)] border border-base-300 bg-base-100 p-4">
+                    <div className="flex flex-col items-center gap-2">
+                      <span className="font-body text-xs text-base-content/50">한자 (필기) — 고르면 답에 이어붙어요</span>
+                      <HandwritingFrame key={canvasKey} onRecognize={setCandidates} onClear={() => setCandidates([])} />
+                      {candidates.length > 0 && (
+                        <CandidateChips
+                          candidates={candidates}
+                          onSelect={(c) => {
+                            appendToAnswer(c);
+                            setCandidates([]);
+                            setCanvasKey((k) => k + 1);
+                          }}
+                        />
+                      )}
+                    </div>
+
+                    <div className="flex flex-col items-center gap-2">
+                      <span className="font-body text-xs text-base-content/50">히라가나</span>
+                      <HiraganaKeyboard onSelect={appendToAnswer} />
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
 
             {gradeError && <p className="font-body text-xs text-secondary">{gradeError}</p>}
 
