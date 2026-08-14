@@ -9,6 +9,7 @@ import { ProgressStat } from '../components/common/ProgressStat';
 import { HandwritingFrame } from '../components/handwriting/HandwritingFrame';
 import { CandidateChips } from '../components/game/fill-blank/CandidateChips';
 import { HiraganaKeyboard } from '../components/game/fill-blank/HiraganaKeyboard';
+import { KatakanaKeyboard } from '../components/game/fill-blank/KatakanaKeyboard';
 import { useAppConfig } from '../hooks/useAppConfig';
 import { useGrammarNotes } from '../hooks/useGrammarNotes';
 import { useWordBank } from '../hooks/useWordBank';
@@ -207,7 +208,7 @@ export function TranslateGamePage({ progress, onExit }: TranslateGamePageProps) 
             {result === null && (
               <div className="flex flex-col items-center gap-3">
                 <Button variant="ghost" size="sm" onClick={() => setHandwritingOpen((v) => !v)}>
-                  {handwritingOpen ? '한자/히라가나 입력기 닫기' : '✏️ 한자/히라가나 입력기로 이어 쓰기'}
+                  {handwritingOpen ? '한자/가나 입력기 닫기' : '✏️ 한자/가나 입력기로 이어 쓰기'}
                 </Button>
 
                 {handwritingOpen && (
@@ -230,6 +231,11 @@ export function TranslateGamePage({ progress, onExit }: TranslateGamePageProps) 
                     <div className="flex flex-col items-center gap-2">
                       <span className="font-body text-xs text-base-content/50">히라가나</span>
                       <HiraganaKeyboard onSelect={appendToAnswer} />
+                    </div>
+
+                    <div className="flex flex-col items-center gap-2">
+                      <span className="font-body text-xs text-base-content/50">가타카나</span>
+                      <KatakanaKeyboard onSelect={appendToAnswer} />
                     </div>
                   </div>
                 )}

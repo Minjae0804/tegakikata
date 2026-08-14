@@ -8,6 +8,7 @@ import { useMemo, useState } from 'react';
 import { HandwritingFrame } from '../components/handwriting/HandwritingFrame';
 import { CandidateChips } from '../components/game/fill-blank/CandidateChips';
 import { HiraganaKeyboard } from '../components/game/fill-blank/HiraganaKeyboard';
+import { KatakanaKeyboard } from '../components/game/fill-blank/KatakanaKeyboard';
 import { FeedbackBanner } from '../components/common/FeedbackBanner';
 import { ProgressStat } from '../components/common/ProgressStat';
 import { Button } from '../components/common/Button';
@@ -46,11 +47,12 @@ export function WordBankGamePage({ progress, onExit }: WordBankGamePageProps) {
   const [enteredChars, setEnteredChars] = useState<string[]>([]);
   const [candidates, setCandidates] = useState<string[]>([]);
   const [canvasKey, setCanvasKey] = useState(0);
-  const [inputMode, setInputMode] = useState<'kanji' | 'hiragana'>('kanji');
+  const [inputMode, setInputMode] = useState<'kanji' | 'hiragana' | 'katakana'>('kanji');
   const [submitted, setSubmitted] = useState(false);
 
   // "한자 → 읽기·뜻" 상태
   const [readingChars, setReadingChars] = useState<string[]>([]);
+  const [readingScript, setReadingScript] = useState<'hiragana' | 'katakana'>('hiragana');
   const [meaningAnswer, setMeaningAnswer] = useState('');
   const [grading, setGrading] = useState(false);
   const [gradeError, setGradeError] = useState<string | null>(null);
@@ -72,6 +74,7 @@ export function WordBankGamePage({ progress, onExit }: WordBankGamePageProps) {
 
   const resetToReadingInput = () => {
     setReadingChars([]);
+    setReadingScript('hiragana');
     setMeaningAnswer('');
     setRecallResult(null);
     setGradeError(null);
@@ -220,10 +223,10 @@ export function WordBankGamePage({ progress, onExit }: WordBankGamePageProps) {
               </div>
 
               {/* 한자 입력(필기) 모드에서는 타이핑으로 답을 써버리면 필기 연습 의미가 없어지므로
-                  직접 입력을 막는다 — 히라가나 입력 모드일 때만 타이핑 허용 */}
+                  직접 입력을 막는다 — 히라가나/가타카나 입력 모드일 때만 타이핑 허용 */}
               <div className="flex flex-col items-center gap-2">
                 <span className="font-body text-xs text-base-content/50">
-                  입력한 글자{inputMode === 'hiragana' ? ' — 눌러서 직접 입력도 가능해요' : ''}
+                  입력한 글자{inputMode !== 'kanji' ? ' — 눌러서 직접 입력도 가능해요' : ''}
                 </span>
                 <input
                   type="text"
@@ -231,9 +234,9 @@ export function WordBankGamePage({ progress, onExit }: WordBankGamePageProps) {
                   onChange={(e) => setEnteredChars(Array.from(e.target.value))}
                   readOnly={submitted || inputMode === 'kanji'}
                   placeholder={
-                    inputMode === 'hiragana'
-                      ? '여기를 눌러 타이핑하거나, 아래 버튼으로 히라가나를 입력하세요'
-                      : '아래 캔버스에 한자를 필기해서 채워보세요'
+                    inputMode === 'kanji'
+                      ? '아래 캔버스에 한자를 필기해서 채워보세요'
+                      : `여기를 눌러 타이핑하거나, 아래 버튼으로 ${inputMode === 'hiragana' ? '히라가나' : '가타카나'}를 입력하세요`
                   }
                   className="font-jp min-h-14 w-64 rounded-[var(--radius-box)] border-2 border-base-300 bg-base-100
                              px-4 py-2 text-center text-2xl text-base-content placeholder:font-body placeholder:text-xs
@@ -267,6 +270,15 @@ export function WordBankGamePage({ progress, onExit }: WordBankGamePageProps) {
                     >
                       히라가나 입력
                     </button>
+                    <button
+                      type="button"
+                      onClick={() => setInputMode('katakana')}
+                      className={`btn btn-sm rounded-[var(--radius-field)] ${
+                        inputMode === 'katakana' ? 'btn-primary' : 'btn-outline'
+                      }`}
+                    >
+                      가타카나 입력
+                    </button>
                   </div>
 
                   {inputMode === 'kanji' && (
@@ -292,6 +304,10 @@ export function WordBankGamePage({ progress, onExit }: WordBankGamePageProps) {
 
                   {inputMode === 'hiragana' && (
                     <HiraganaKeyboard onSelect={(c) => setEnteredChars((prev) => [...prev, c])} />
+                  )}
+
+                  {inputMode === 'katakana' && (
+                    <KatakanaKeyboard onSelect={(c) => setEnteredChars((prev) => [...prev, c])} />
                   )}
 
                   <Button variant="primary" onClick={handleSubmitKanji} disabled={enteredChars.length === 0}>
@@ -326,12 +342,12 @@ export function WordBankGamePage({ progress, onExit }: WordBankGamePageProps) {
               {!blockedByMissingApiKey && recallResult === null && (
                 <div className="flex flex-col gap-4">
                   <div className="flex flex-col items-center gap-2">
-                    <span className="font-body text-xs text-base-content/50">읽기 (히라가나) — 눌러서 직접 입력도 가능해요</span>
+                    <span className="font-body text-xs text-base-content/50">읽기 (가나) — 눌러서 직접 입력도 가능해요</span>
                     <input
                       type="text"
                       value={readingText}
                       onChange={(e) => setReadingChars(Array.from(e.target.value))}
-                      placeholder="여기를 눌러 타이핑하거나, 아래 버튼으로 히라가나를 입력하세요"
+                      placeholder="여기를 눌러 타이핑하거나, 아래 버튼으로 입력하세요"
                       className="font-jp min-h-14 w-64 rounded-[var(--radius-box)] border-2 border-base-300 bg-base-100
                                  px-4 py-2 text-center text-2xl text-base-content placeholder:font-body placeholder:text-xs
                                  placeholder:text-base-content/30"
@@ -341,7 +357,33 @@ export function WordBankGamePage({ progress, onExit }: WordBankGamePageProps) {
                         마지막 글자 지우기
                       </Button>
                     )}
-                    <HiraganaKeyboard onSelect={(c) => setReadingChars((prev) => [...prev, c])} />
+
+                    <div className="flex gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setReadingScript('hiragana')}
+                        className={`btn btn-sm rounded-[var(--radius-field)] ${
+                          readingScript === 'hiragana' ? 'btn-primary' : 'btn-outline'
+                        }`}
+                      >
+                        히라가나
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setReadingScript('katakana')}
+                        className={`btn btn-sm rounded-[var(--radius-field)] ${
+                          readingScript === 'katakana' ? 'btn-primary' : 'btn-outline'
+                        }`}
+                      >
+                        가타카나
+                      </button>
+                    </div>
+
+                    {readingScript === 'hiragana' ? (
+                      <HiraganaKeyboard onSelect={(c) => setReadingChars((prev) => [...prev, c])} />
+                    ) : (
+                      <KatakanaKeyboard onSelect={(c) => setReadingChars((prev) => [...prev, c])} />
+                    )}
                   </div>
 
                   <label className="flex flex-col gap-1.5">
