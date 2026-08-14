@@ -19,25 +19,33 @@ interface SrsState {
   intervalDays: number;
 }
 
-/** Anki의 핵심 공식: again은 리셋, hard/good/easy는 이지팩터를 곱해서(easy는 보너스까지) 간격을 늘린다. */
+/**
+ * Anki의 핵심 공식: again은 리셋, hard/good/easy는 이지팩터를 곱해서(easy는 보너스까지) 간격을 늘린다.
+ *
+ * 처음 보는 단어(interval이 아직 없음)는 곱셈 공식을 쓸 "이전 간격"이 없어서, hard/good이 똑같이
+ * "1일"로 떨어지는 문제가 있었다(다시=1, 어려움=1, 보통=1 — 셋 다 똑같아 보이는 버그).
+ * 그래서 처음 볼 때만 등급별로 서로 다른 시작 간격(0/1/2/4일)을 명시적으로 준다.
+ */
 function computeNext(prev: SrsState | undefined, rating: Rating): SrsState {
   const ease = prev?.ease ?? DEFAULT_EASE;
   const interval = prev?.intervalDays ?? 0;
+  const isNew = interval <= 0;
 
   switch (rating) {
     case 'again':
-      return { ease: Math.max(MIN_EASE, ease - 0.2), intervalDays: 1 };
+      // 틀렸으니 즉시(오늘) 다시 — 이전에 얼마나 길게 벌어져 있었든 상관없이 리셋.
+      return { ease: Math.max(MIN_EASE, ease - 0.2), intervalDays: 0 };
     case 'hard':
       return {
         ease: Math.max(MIN_EASE, ease - 0.15),
-        intervalDays: interval <= 0 ? 1 : Math.max(interval + 1, Math.round(interval * 1.2)),
+        intervalDays: isNew ? 1 : Math.max(interval + 1, Math.round(interval * 1.2)),
       };
     case 'good':
-      return { ease, intervalDays: interval <= 0 ? 1 : Math.round(interval * ease) };
+      return { ease, intervalDays: isNew ? 2 : Math.round(interval * ease) };
     case 'easy':
       return {
         ease: ease + 0.15,
-        intervalDays: interval <= 0 ? 4 : Math.round(interval * ease * EASY_BONUS),
+        intervalDays: isNew ? 4 : Math.round(interval * ease * EASY_BONUS),
       };
   }
 }

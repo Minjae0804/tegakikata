@@ -209,7 +209,9 @@ export function WordBankStudyPage({ progress, onExit }: WordBankStudyPageProps) 
                 >
                   <span className="font-body text-sm">{label}</span>
                   <span className="font-body text-[10px] opacity-70">
-                    {previewIntervalDays(currentEntry, rating)}일
+                    {previewIntervalDays(currentEntry, rating) === 0
+                      ? '오늘'
+                      : `${previewIntervalDays(currentEntry, rating)}일`}
                   </span>
                 </button>
               ))}
