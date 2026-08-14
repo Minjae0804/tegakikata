@@ -90,7 +90,9 @@ kanji,reading,meaning,jlpt_level,notes
 勉強,べんきょう,공부,N5,
 ```
 
-- `kanji`, `reading`, `meaning` 필수 / `jlpt_level`, `notes` 선택
+- `reading`, `meaning` 필수 / `jlpt_level`, `notes` 선택
+- `kanji`는 비워둬도 됨 — たくさん처럼 한자 표기가 없는 단어는 그렇게 등록하면, 각 게임이 알아서
+  "한자 쓰기" 대신 "읽기 쓰기"로, "한자 보고 맞히기" 대신 "읽기 보고 뜻 맞히기"로 문제를 바꿔서 낸다
 - 헤더 이름 기준으로 읽으므로 컬럼 순서는 상관없음
 - 구글 시트나 엑셀에서 편집해도 됨
 - 직접 만들기 번거로우면 [AI로 단어장 만들기](WORDBANK_AI_PROMPT.md)의 프롬프트로 교재 사진에서 바로 뽑아낼 수 있다

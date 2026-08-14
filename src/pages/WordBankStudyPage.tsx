@@ -13,6 +13,7 @@ import type { ProgressController } from '../hooks/useProgress';
 import { WordBankPicker } from '../components/wordbank/WordBankPicker';
 import { pickDueWords, previewInterval, formatInterval, type Rating } from '../lib/srs/schedule';
 import { shuffle } from '../lib/wordbank/shuffle';
+import { hasKanji } from '../lib/wordbank/hasKanji';
 import type { WordEntry } from '../types';
 
 interface WordBankStudyPageProps {
@@ -43,7 +44,6 @@ export function WordBankStudyPage({ progress, onExit }: WordBankStudyPageProps) 
 
   const resetPractice = () => {
     setWritingOpen(false);
-    setPracticeInputMode('kanji');
     setPracticeChars([]);
   };
 
@@ -78,6 +78,13 @@ export function WordBankStudyPage({ progress, onExit }: WordBankStudyPageProps) 
 
   const word = queue[0] ?? null;
   const currentEntry = word ? progress.entries.get(word.id) : undefined;
+  const wordHasKanji = word !== null && hasKanji(word);
+
+  // 카드가 바뀌면 "손으로 써보기"의 기본 입력 모드도 그 단어에 맞춘다 — 한자가 없는 단어면
+  // 한자 필기는 쓸 데가 없으니 히라가나로 시작한다.
+  useEffect(() => {
+    setPracticeInputMode(word && hasKanji(word) ? 'kanji' : 'hiragana');
+  }, [word]);
 
   const wordBankEmpty = !wordBank.wordsLoading && wordBank.words.length === 0;
   const nothingDue = seeded && initialQueueSize === 0 && wordBank.words.length > 0;
@@ -201,11 +208,13 @@ export function WordBankStudyPage({ progress, onExit }: WordBankStudyPageProps) 
                 <JlptBadge level={word.jlptLevel} />
               </div>
             )}
-            <p className="font-jp text-5xl text-base-content">{word.kanji}</p>
+            <p className="font-jp text-5xl text-base-content">{wordHasKanji ? word.kanji : word.reading}</p>
+            {!wordHasKanji && <p className="font-body text-[10px] text-base-content/40">한자 없는 단어</p>}
 
             {flipped ? (
               <div className="flex flex-col items-center gap-1 pt-2">
-                <p className="font-jp text-xl text-base-content/80">{word.reading}</p>
+                {/* 한자가 없는 단어는 위에서 이미 읽기를 보여줬으니 여기선 뜻만 다시 보여준다. */}
+                {wordHasKanji && <p className="font-jp text-xl text-base-content/80">{word.reading}</p>}
                 <p className="font-body text-base text-base-content/60">{word.meaning}</p>
               </div>
             ) : (
@@ -226,7 +235,7 @@ export function WordBankStudyPage({ progress, onExit }: WordBankStudyPageProps) 
                   <div className="flex min-h-11 items-center gap-1 rounded-[var(--radius-field)] border-2 border-base-300 bg-base-100 px-3 py-1.5">
                     {practiceChars.length === 0 ? (
                       <span className="font-body text-xs text-base-content/30 select-none">
-                        연습 삼아 「{word.kanji}」를 써보세요
+                        연습 삼아 「{wordHasKanji ? word.kanji : word.reading}」를 써보세요
                       </span>
                     ) : (
                       practiceChars.map((char, i) => (
@@ -246,6 +255,7 @@ export function WordBankStudyPage({ progress, onExit }: WordBankStudyPageProps) 
                     mode={practiceInputMode}
                     onModeChange={setPracticeInputMode}
                     onSelect={(c) => setPracticeChars((prev) => [...prev, c])}
+                    modes={wordHasKanji ? undefined : ['hiragana', 'katakana']}
                   />
                 </div>
               )}

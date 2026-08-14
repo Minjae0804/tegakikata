@@ -57,23 +57,29 @@ export async function generateFillBlankQuestion(
   model?: string
 ): Promise<FillBlankQuestion> {
   if (word) {
+    // 한자 표기가 없는 단어(たくさん 등)는 kanji 대신 reading을 빈칸의 정답 문자열로 쓴다.
+    const answerText = word.kanji.trim() || word.reading;
+    const noKanjiNote = word.kanji.trim()
+      ? ''
+      : `\n참고: 이 단어는 한자 표기가 없는 단어라 정답 문자열이 히라가나/가타카나(${answerText})입니다.
+그대로 두고, 다른 한자로 바꿔쓰지 마세요.`;
     const prompt = `당신은 일본어 학습 앱의 문제 출제자입니다.
 다음 단어를 사용한 자연스러운 일본어 예문을 하나 만들어주세요.
 
-단어: ${word.kanji}(${word.reading}) — 뜻: ${word.meaning}, JLPT 레벨: ${word.jlptLevel ?? '미지정'}
+단어: ${answerText} — 뜻: ${word.meaning}, JLPT 레벨: ${word.jlptLevel ?? '미지정'}${noKanjiNote}
 학습자 상황: ${contextSummary || '특별한 학습 이력 없음'}
 
 요구사항:
-- 예문 안에 "${word.kanji}"라는 문자열이 그대로(부분만 잘리지 않고 전체가) 자연스럽게
+- 예문 안에 "${answerText}"라는 문자열이 그대로(부분만 잘리지 않고 전체가) 자연스럽게
   등장해야 하며, 그 부분을 정확히 "___"로 치환해 표시할 것.
   잘못된 예: 정답이 "日本人"인데 "隣のテーブルの人が"처럼 다른 단어("人")의 일부만
   빈칸으로 만들고 그걸 정답인 척하는 것 — 이런 식으로 단어를 쪼개거나, 단어의 글자가
-  우연히 다른 곳에 흩어져 있는 걸 정답 취급하면 절대 안 됨. "${word.kanji}"라는
+  우연히 다른 곳에 흩어져 있는 걸 정답 취급하면 절대 안 됨. "${answerText}"라는
   글자 뭉치가 문장에 실제로 이어져서 나와야 함
-- 매우 중요: "${word.kanji}"는 활용하지 말고 사전형(원형) 그대로 문장에 넣을 것. 동사/형용사처럼
+- 매우 중요: "${answerText}"는 활용하지 말고 사전형(원형) 그대로 문장에 넣을 것. 동사/형용사처럼
   활용되는 품사라면, 사전형이 자연스럽게 오는 문형을 골라서 쓸 것 — 예: 〜ことにする, 〜ことが
   できる, 〜前に, 〜つもりだ, 〜ように, 〜という, 또는 명사를 수식하는 자리(사전형+명사)처럼
-  사전형 뒤에 오는 구조. "食べました/食べています"처럼 활용해서 "${word.kanji}"라는 글자
+  사전형 뒤에 오는 구조. "食べました/食べています"처럼 활용해서 "${answerText}"라는 글자
   뭉치가 문장에 그대로 안 보이게 되는 건 절대 안 됨 — 활용형으로 바꾸느니 사전형이 자연스럽게
   들어가는 다른 문형/상황을 고를 것
 - 예문은 JLPT 레벨에 맞는 난이도로 작성할 것
@@ -173,7 +179,7 @@ export async function generateTranslateQuestion(
       ? `- 문장 안에 다음 단어들의 뜻이 전부 자연스럽게 들어가야 함. 번역할 때 학습자가 이 단어들을
   실제로 쓰게 되는 문장이어야 함(억지로 다 우겨넣어서 문장이 부자연스러워지면 안 되고, 자연스럽게
   하나의 상황/문맥으로 엮을 것):
-  ${words.map((w) => `"${w.meaning}"(일본어로는 ${w.kanji}/${w.reading})`).join(', ')}`
+  ${words.map((w) => `"${w.meaning}"(일본어로는 ${w.kanji.trim() ? `${w.kanji}/${w.reading}` : w.reading})`).join(', ')}`
       : '';
 
   const prompt = `당신은 일본어 학습 앱의 문제 출제자입니다.
@@ -238,9 +244,9 @@ export async function gradeWordRecall(
   model?: string
 ): Promise<WordRecallGradeResult> {
   const prompt = `당신은 일본어 학습 앱의 채점자입니다.
-아래 한자 단어를 보고 사용자가 읽기(히라가나)와 뜻(한국어)을 답했습니다. 각각 채점해주세요.
+아래 단어를 보고 사용자가 읽기(히라가나)와 뜻(한국어)을 답했습니다. 각각 채점해주세요.
 
-한자: ${word.kanji}
+${word.kanji.trim() ? `한자: ${word.kanji}` : '이 단어는 한자 표기가 없는 단어입니다.'}
 정답 읽기: ${word.reading}
 정답 뜻: ${word.meaning}
 사용자가 입력한 읽기: ${userReading || '(입력 안 함)'}

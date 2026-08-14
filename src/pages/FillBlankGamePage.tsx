@@ -21,6 +21,7 @@ import { useGrammarNotes } from '../hooks/useGrammarNotes';
 import { generateFillBlankQuestion, hasRequiredApiKey } from '../lib/ai/aiClient';
 import { shuffle } from '../lib/wordbank/shuffle';
 import { normalizeForMatch } from '../lib/kana/answerMatch';
+import { hasKanji } from '../lib/wordbank/hasKanji';
 import type { FillBlankQuestion } from '../types';
 
 interface FillBlankGamePageProps {
@@ -52,10 +53,12 @@ export function FillBlankGamePage({ progress, onExit }: FillBlankGamePageProps) 
   const shuffledWords = useMemo(() => shuffle(wordBank.words), [wordBank.words]);
 
   const enteredText = enteredChars.join('');
+  // 한자 표기가 없는 단어(たくさん 등)는 kanji가 비어있으므로, 그럴 땐 읽기를 정답으로 삼는다.
+  const targetHasKanji = question !== null && hasKanji(question.targetWord);
+  const targetAnswer = question ? (targetHasKanji ? question.targetWord.kanji : question.targetWord.reading) : '';
   // 가타카나/영문/숫자/문장부호처럼 필기·히라가나 버튼 어느 쪽으로도 입력할 수 없는 문자와 공백은
   // 채점에서 제외한다 — 그런 문자가 정답에 섞여 있으면 영영 못 맞히게 되는 걸 막기 위함.
-  const isCorrect =
-    submitted && question !== null && normalizeForMatch(enteredText) === normalizeForMatch(question.targetWord.kanji);
+  const isCorrect = submitted && question !== null && normalizeForMatch(enteredText) === normalizeForMatch(targetAnswer);
 
   const loadQuestion = async () => {
     if (!config || !hasRequiredApiKey(config) || wordBank.wordsLoading) return;
@@ -77,6 +80,12 @@ export function FillBlankGamePage({ progress, onExit }: FillBlankGamePageProps) 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [config, wordIndex, wordBank.wordsLoading]);
 
+  // 새 문제가 오면 입력 모드를 그 단어에 맞게 맞춰준다 — 한자가 없는 단어면 한자 필기는
+  // 애초에 쓸 데가 없으니 히라가나 입력으로 기본값을 바꾼다.
+  useEffect(() => {
+    if (question) setInputMode(hasKanji(question.targetWord) ? 'kanji' : 'hiragana');
+  }, [question]);
+
   /** 입력 패널(한자 후보/히라가나/가타카나 어느 쪽에서든)에서 글자 하나가 확정될 때마다 호출된다. */
   const handleAddChar = (char: string) => {
     if (submitted) return;
@@ -90,7 +99,7 @@ export function FillBlankGamePage({ progress, onExit }: FillBlankGamePageProps) 
 
   const handleSubmit = () => {
     if (enteredChars.length === 0 || !question) return;
-    const correct = normalizeForMatch(enteredText) === normalizeForMatch(question.targetWord.kanji);
+    const correct = normalizeForMatch(enteredText) === normalizeForMatch(targetAnswer);
     setSubmitted(true);
     setAnsweredCount((n) => n + 1);
     if (correct) setCorrectCount((n) => n + 1);
@@ -225,7 +234,12 @@ export function FillBlankGamePage({ progress, onExit }: FillBlankGamePageProps) 
 
           {!submitted && (
             <div className="flex flex-col items-center gap-4">
-              <KanaInputPanel mode={inputMode} onModeChange={setInputMode} onSelect={handleAddChar} />
+              <KanaInputPanel
+                mode={inputMode}
+                onModeChange={setInputMode}
+                onSelect={handleAddChar}
+                modes={targetHasKanji ? undefined : ['hiragana', 'katakana']}
+              />
 
               <Button variant="primary" onClick={handleSubmit} disabled={enteredChars.length === 0}>
                 제출
@@ -239,8 +253,8 @@ export function FillBlankGamePage({ progress, onExit }: FillBlankGamePageProps) 
                 status={isCorrect ? 'correct' : 'incorrect'}
                 message={
                   isCorrect
-                    ? `정답이에요. 「${question.targetWord.kanji}(${question.targetWord.reading})」 — ${question.targetWord.meaning}`
-                    : `아쉬워요, 정답은 「${question.targetWord.kanji}(${question.targetWord.reading})」예요. (입력한 답: 「${enteredText}」)`
+                    ? `정답이에요. 「${targetHasKanji ? `${question.targetWord.kanji}(${question.targetWord.reading})` : question.targetWord.reading}」 — ${question.targetWord.meaning}`
+                    : `아쉬워요, 정답은 「${targetHasKanji ? `${question.targetWord.kanji}(${question.targetWord.reading})` : question.targetWord.reading}」예요. (입력한 답: 「${enteredText}」)`
                 }
               />
               {question.translation && (

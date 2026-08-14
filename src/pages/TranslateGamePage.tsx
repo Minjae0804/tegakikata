@@ -14,6 +14,7 @@ import type { ProgressController } from '../hooks/useProgress';
 import { WordBankPicker } from '../components/wordbank/WordBankPicker';
 import { generateTranslateQuestion, gradeTranslation, hasRequiredApiKey } from '../lib/ai/aiClient';
 import { shuffle } from '../lib/wordbank/shuffle';
+import { hasKanji } from '../lib/wordbank/hasKanji';
 import type { TranslateGradeResult, WordEntry } from '../types';
 
 interface TranslateGamePageProps {
@@ -227,7 +228,9 @@ export function TranslateGamePage({ progress, onExit }: TranslateGamePageProps) 
                 {questionWords.length > 0 && (
                   <p className="font-body text-xs text-base-content/50">
                     이 문제에 쓰인 단어:{' '}
-                    {questionWords.map((w) => `「${w.kanji}(${w.reading})」 — ${w.meaning}`).join(', ')}
+                    {questionWords
+                      .map((w) => `「${hasKanji(w) ? `${w.kanji}(${w.reading})` : w.reading}」 — ${w.meaning}`)
+                      .join(', ')}
                   </p>
                 )}
                 <Button variant="primary" onClick={handleNext}>

@@ -2,16 +2,20 @@
 // 사용자가 Google Drive에서 스프레드시트로 직접 열어 수정할 수 있도록 CSV로 저장한다.
 //
 // 컬럼 (헤더 이름 기준으로 파싱 — 순서는 상관없음):
-//   kanji       (필수) 한자/표제어
+//   kanji       (선택) 한자/표제어 — たくさん처럼 한자가 없는 단어는 비워둬도 됨
 //   reading     (필수) 읽기 (히라가나/가타카나)
 //   meaning     (필수) 한국어 뜻
 //   jlpt_level  (선택) N5~N1
 //   notes       (선택) 사용자 메모
 //
+// kanji가 비어있으면(한자 없는 단어) 각 게임이 알아서 "한자 쓰기" 대신 "읽기 쓰기"로,
+// "한자 보고 뜻/읽기 맞히기" 대신 "읽기 보고 뜻 맞히기"로 문제 형태를 바꿔서 낸다.
+//
 // id는 컬럼에 없고 kanji+reading 조합으로 파싱 시점에 자동 생성한다.
 
 import type { WordEntry } from '../../types';
 
+// kanji 컬럼 자체는 헤더에 있어야 하지만(포맷 일관성을 위해), 행마다 값은 비워둘 수 있다.
 const REQUIRED_COLUMNS = ['kanji', 'reading', 'meaning'] as const;
 const VALID_JLPT_LEVELS = new Set(['N5', 'N4', 'N3', 'N2', 'N1']);
 
@@ -95,10 +99,11 @@ export function parseWordBankCsv(csvText: string): WordEntry[] {
 
   const entries: WordEntry[] = [];
   for (const row of rows.slice(1)) {
-    const kanji = row[kanjiIdx]?.trim();
+    // kanji는 비어있을 수 있다(한자 없는 단어) — reading/meaning만 필수.
+    const kanji = row[kanjiIdx]?.trim() ?? '';
     const reading = row[readingIdx]?.trim();
     const meaning = row[meaningIdx]?.trim();
-    if (!kanji || !reading || !meaning) continue; // 필수값 비어있는 행은 건너뜀
+    if (!reading || !meaning) continue; // 필수값 비어있는 행은 건너뜀
 
     const rawLevel = jlptIdx >= 0 ? row[jlptIdx]?.trim().toUpperCase() : undefined;
     const jlptLevel = rawLevel && VALID_JLPT_LEVELS.has(rawLevel) ? (rawLevel as WordEntry['jlptLevel']) : undefined;

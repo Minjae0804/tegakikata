@@ -4,7 +4,7 @@
 //    글자 그대로 비교해서 채점한다.
 //  - "한자 → 읽기·뜻": 한자만 보고 읽기(히라가나)와 뜻(한국어)을 답한다. 오탈자/동의어처럼
 //    유연하게 봐줘야 하는 채점이라 AI(Gemini/Claude)로 채점한다.
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { KanaInputPanel, type KanaInputMode } from '../components/game/fill-blank/KanaInputPanel';
 import { FeedbackBanner } from '../components/common/FeedbackBanner';
 import { ProgressStat } from '../components/common/ProgressStat';
@@ -16,6 +16,7 @@ import { WordBankPicker } from '../components/wordbank/WordBankPicker';
 import { gradeWordRecall, hasRequiredApiKey } from '../lib/ai/aiClient';
 import { shuffle } from '../lib/wordbank/shuffle';
 import { normalizeForMatch } from '../lib/kana/answerMatch';
+import { hasKanji } from '../lib/wordbank/hasKanji';
 import type { WordRecallGradeResult } from '../types';
 
 interface WordBankGamePageProps {
@@ -55,10 +56,20 @@ export function WordBankGamePage({ progress, onExit }: WordBankGamePageProps) {
 
   const enteredText = enteredChars.join('');
   const readingText = readingChars.join('');
+  // 한자 표기가 없는 단어(たくさん 등)는 "뜻·읽기 → 한자" 방향에서 쓸 한자가 아예 없으므로,
+  // 이럴 땐 대신 읽기(히라가나)를 답으로 쓰게 한다.
+  const wordHasKanji = word !== null && hasKanji(word);
+  const kanjiTarget = word ? (wordHasKanji ? word.kanji : word.reading) : '';
   // 가타카나/영문/숫자/문장부호처럼 필기·히라가나 버튼 어느 쪽으로도 입력할 수 없는 문자와 공백은
   // 채점에서 제외한다 — 그런 문자가 정답에 섞여 있으면 영영 못 맞히게 되는 걸 막기 위함.
   const isKanjiCorrect =
-    submitted && word !== null && normalizeForMatch(enteredText) === normalizeForMatch(word.kanji);
+    submitted && word !== null && normalizeForMatch(enteredText) === normalizeForMatch(kanjiTarget);
+
+  // 새 단어가 오면 "뜻·읽기 → 한자" 입력 모드를 그 단어에 맞게 맞춰준다 — 한자가 없는 단어면
+  // 한자 필기는 애초에 쓸 데가 없으니 히라가나 입력으로 기본값을 바꾼다.
+  useEffect(() => {
+    if (word) setInputMode(hasKanji(word) ? 'kanji' : 'hiragana');
+  }, [word]);
 
   const resetToKanjiInput = () => {
     setEnteredChars([]);
@@ -89,7 +100,7 @@ export function WordBankGamePage({ progress, onExit }: WordBankGamePageProps) {
   /** "뜻·읽기 → 한자" 채점 — AI 미사용, 단어장 데이터와 문자열 그대로 비교. */
   const handleSubmitKanji = () => {
     if (enteredChars.length === 0 || !word) return;
-    const correct = normalizeForMatch(enteredText) === normalizeForMatch(word.kanji);
+    const correct = normalizeForMatch(enteredText) === normalizeForMatch(kanjiTarget);
     setSubmitted(true);
     setAnsweredCount((n) => n + 1);
     if (correct) setCorrectCount((n) => n + 1);
@@ -97,17 +108,22 @@ export function WordBankGamePage({ progress, onExit }: WordBankGamePageProps) {
     progress.recordReview(word.id, correct ? 'good' : 'again');
   };
 
-  /** "한자 → 읽기·뜻" 채점 — AI 사용. */
+  /** "한자 → 읽기·뜻" 채점 — AI 사용. 한자가 없는 단어는 이미 읽기를 보여준 상태라 뜻만 채점한다. */
   const handleGradeReading = async () => {
     if (!word || !config || !hasRequiredApiKey(config)) return;
-    if (readingText.trim() === '' && meaningAnswer.trim() === '') return;
+    if (wordHasKanji) {
+      if (readingText.trim() === '' && meaningAnswer.trim() === '') return;
+    } else if (meaningAnswer.trim() === '') {
+      return;
+    }
     setGrading(true);
     setGradeError(null);
     try {
-      const graded = await gradeWordRecall(config, word, readingText.trim(), meaningAnswer.trim());
+      // 한자 없는 단어는 읽기를 이미 보여줬으니, 정답 읽기를 그대로 넘겨 그 부분은 항상 통과시킨다.
+      const graded = await gradeWordRecall(config, word, wordHasKanji ? readingText.trim() : word.reading, meaningAnswer.trim());
       setRecallResult(graded);
       setAnsweredCount((n) => n + 1);
-      const correct = graded.readingCorrect && graded.meaningCorrect;
+      const correct = wordHasKanji ? graded.readingCorrect && graded.meaningCorrect : graded.meaningCorrect;
       if (correct) setCorrectCount((n) => n + 1);
       progress.recordReview(word.id, correct ? 'good' : 'again');
     } catch (e) {
@@ -210,9 +226,13 @@ export function WordBankGamePage({ progress, onExit }: WordBankGamePageProps) {
           {direction === 'toKanji' ? (
             <>
               <div className="flex flex-col items-center gap-1 rounded-[var(--radius-box)] border border-base-300 bg-base-100 p-5">
-                <span className="font-body text-xs text-base-content/50">뜻을 보고 한자를 써보세요</span>
+                <span className="font-body text-xs text-base-content/50">
+                  {wordHasKanji ? '뜻을 보고 한자를 써보세요' : '뜻을 보고 읽기(히라가나)를 써보세요 — 이 단어는 한자가 없어요'}
+                </span>
                 <p className="font-body text-2xl text-base-content">{word.meaning}</p>
-                <p className="font-jp text-base text-base-content/50">{word.reading}</p>
+                {/* 한자가 없는 단어는 읽기 자체가 정답이라 여기서 미리 보여주면 답을 그냥 알려주는
+                    셈이 되므로 숨긴다 — 한자가 있을 때만 읽기를 힌트로 보여준다. */}
+                {wordHasKanji && <p className="font-jp text-base text-base-content/50">{word.reading}</p>}
               </div>
 
               {/* 한자 입력(필기) 모드에서는 타이핑으로 답을 써버리면 필기 연습 의미가 없어지므로
@@ -248,6 +268,7 @@ export function WordBankGamePage({ progress, onExit }: WordBankGamePageProps) {
                     mode={inputMode}
                     onModeChange={setInputMode}
                     onSelect={(c) => setEnteredChars((prev) => [...prev, c])}
+                    modes={wordHasKanji ? undefined : ['hiragana', 'katakana']}
                   />
 
                   <Button variant="primary" onClick={handleSubmitKanji} disabled={enteredChars.length === 0}>
@@ -262,8 +283,8 @@ export function WordBankGamePage({ progress, onExit }: WordBankGamePageProps) {
                     status={isKanjiCorrect ? 'correct' : 'incorrect'}
                     message={
                       isKanjiCorrect
-                        ? `정답이에요. 「${word.kanji}(${word.reading})」 — ${word.meaning}`
-                        : `아쉬워요, 정답은 「${word.kanji}(${word.reading})」예요. (입력한 답: 「${enteredText}」)`
+                        ? `정답이에요. 「${wordHasKanji ? `${word.kanji}(${word.reading})` : word.reading}」 — ${word.meaning}`
+                        : `아쉬워요, 정답은 「${wordHasKanji ? `${word.kanji}(${word.reading})` : word.reading}」예요. (입력한 답: 「${enteredText}」)`
                     }
                   />
                   <Button variant="primary" onClick={handleNext}>
@@ -275,36 +296,42 @@ export function WordBankGamePage({ progress, onExit }: WordBankGamePageProps) {
           ) : (
             <>
               <div className="flex flex-col items-center gap-1 rounded-[var(--radius-box)] border border-base-300 bg-base-100 p-5">
-                <span className="font-body text-xs text-base-content/50">한자를 보고 읽기와 뜻을 답해보세요</span>
-                <p className="font-jp text-4xl text-base-content">{word.kanji}</p>
+                <span className="font-body text-xs text-base-content/50">
+                  {wordHasKanji ? '한자를 보고 읽기와 뜻을 답해보세요' : '읽기를 보고 뜻을 답해보세요 — 이 단어는 한자가 없어요'}
+                </span>
+                <p className="font-jp text-4xl text-base-content">{wordHasKanji ? word.kanji : word.reading}</p>
               </div>
 
               {!blockedByMissingApiKey && recallResult === null && (
                 <div className="flex flex-col gap-4">
-                  <div className="flex flex-col items-center gap-2">
-                    <span className="font-body text-xs text-base-content/50">읽기 (가나) — 눌러서 직접 입력도 가능해요</span>
-                    <input
-                      type="text"
-                      value={readingText}
-                      onChange={(e) => setReadingChars(Array.from(e.target.value))}
-                      placeholder="여기를 눌러 타이핑하거나, 아래 버튼으로 입력하세요"
-                      className="font-jp min-h-14 w-64 rounded-[var(--radius-box)] border-2 border-base-300 bg-base-100
-                                 px-4 py-2 text-center text-2xl text-base-content placeholder:font-body placeholder:text-xs
-                                 placeholder:text-base-content/30"
-                    />
-                    {readingChars.length > 0 && (
-                      <Button variant="ghost" size="sm" onClick={() => setReadingChars((prev) => prev.slice(0, -1))}>
-                        마지막 글자 지우기
-                      </Button>
-                    )}
+                  {/* 한자가 없는 단어는 위 카드에서 읽기를 이미 보여줬으니, 그걸 다시 받아쓰게
+                      하는 건 의미가 없어서 뜻만 물어본다. */}
+                  {wordHasKanji && (
+                    <div className="flex flex-col items-center gap-2">
+                      <span className="font-body text-xs text-base-content/50">읽기 (가나) — 눌러서 직접 입력도 가능해요</span>
+                      <input
+                        type="text"
+                        value={readingText}
+                        onChange={(e) => setReadingChars(Array.from(e.target.value))}
+                        placeholder="여기를 눌러 타이핑하거나, 아래 버튼으로 입력하세요"
+                        className="font-jp min-h-14 w-64 rounded-[var(--radius-box)] border-2 border-base-300 bg-base-100
+                                   px-4 py-2 text-center text-2xl text-base-content placeholder:font-body placeholder:text-xs
+                                   placeholder:text-base-content/30"
+                      />
+                      {readingChars.length > 0 && (
+                        <Button variant="ghost" size="sm" onClick={() => setReadingChars((prev) => prev.slice(0, -1))}>
+                          마지막 글자 지우기
+                        </Button>
+                      )}
 
-                    <KanaInputPanel
-                      mode={readingScript}
-                      onModeChange={setReadingScript}
-                      onSelect={(c) => setReadingChars((prev) => [...prev, c])}
-                      modes={['hiragana', 'katakana']}
-                    />
-                  </div>
+                      <KanaInputPanel
+                        mode={readingScript}
+                        onModeChange={setReadingScript}
+                        onSelect={(c) => setReadingChars((prev) => [...prev, c])}
+                        modes={['hiragana', 'katakana']}
+                      />
+                    </div>
+                  )}
 
                   <label className="flex flex-col gap-1.5">
                     <span className="font-body text-xs text-base-content/60">뜻 (한국어)</span>
@@ -322,7 +349,9 @@ export function WordBankGamePage({ progress, onExit }: WordBankGamePageProps) {
                   <Button
                     variant="primary"
                     onClick={() => void handleGradeReading()}
-                    disabled={grading || (readingText.trim() === '' && meaningAnswer.trim() === '')}
+                    disabled={
+                      grading || (wordHasKanji ? readingText.trim() === '' && meaningAnswer.trim() === '' : meaningAnswer.trim() === '')
+                    }
                   >
                     {grading ? '채점하는 중...' : '채점하기'}
                   </Button>
@@ -332,11 +361,15 @@ export function WordBankGamePage({ progress, onExit }: WordBankGamePageProps) {
               {recallResult && (
                 <div className="flex flex-col gap-3">
                   <FeedbackBanner
-                    status={recallResult.readingCorrect && recallResult.meaningCorrect ? 'correct' : 'incorrect'}
+                    status={
+                      (wordHasKanji ? recallResult.readingCorrect : true) && recallResult.meaningCorrect
+                        ? 'correct'
+                        : 'incorrect'
+                    }
                     message={recallResult.feedback}
                   />
                   <p className="font-body text-xs text-base-content/50">
-                    정답 — 읽기: 「{word.reading}」 · 뜻: {word.meaning}
+                    {wordHasKanji ? `정답 — 읽기: 「${word.reading}」 · 뜻: ${word.meaning}` : `정답 — 뜻: ${word.meaning}`}
                   </p>
                   <Button variant="primary" onClick={handleNext}>
                     다음 문제
