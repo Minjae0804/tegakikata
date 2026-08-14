@@ -143,7 +143,7 @@ export function OnboardingPage({ onComplete }: OnboardingPageProps) {
         <OnboardingStepCard
           step={2}
           title="사용할 폴더/파일 생성"
-          description="/TegakikataApp 폴더와 config.json, profile.md 등 기본 파일을 드라이브에 만들어요."
+          description="/TegakikataApp 폴더와 config.json, grammar.md 등 기본 파일을 드라이브에 만들어요."
           isDone={step2Done}
         />
         <OnboardingStepCard

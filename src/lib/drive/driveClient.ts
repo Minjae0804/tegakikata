@@ -1,7 +1,6 @@
 // Google Drive API 연동 레이어
 // - Google Identity Services(GIS)로 OAuth 액세스 토큰 발급 (index.html에서 스크립트 로드)
-// - /TegakikataApp/ 폴더 및 하위 파일(config.json, profile.md, memory.md,
-//   instructions.md, context.md, wordbanks/, saves/progress.json) 접근
+// - /TegakikataApp/ 폴더 및 하위 파일(config.json, grammar.md, wordbanks/, saves/progress.json) 접근
 // - drive.file 스코프 사용 (앱이 생성/선택한 파일만 접근 가능)
 
 const DRIVE_SCOPE = 'https://www.googleapis.com/auth/drive.file';
@@ -25,10 +24,6 @@ async function throwDriveError(res: Response, label: string): Promise<never> {
 
 const DEFAULT_FILES: Record<string, string> = {
   'config.json': JSON.stringify({ aiProvider: 'claude', geminiApiKey: '', claudeApiKey: '' }, null, 2),
-  'profile.md': '# 사용자 정보\n',
-  'memory.md': '# 기억해야 할 것\n',
-  'instructions.md': '# AI 행동 지시사항\n',
-  'context.md': '# 학습 상태 요약\n',
   'grammar.md':
     '# 문법 노트\n\n' +
     '여기에 정리해둔 문법 포인트를 적어두면, 예문/문제를 생성할 때 AI가 참고합니다.\n' +
@@ -286,7 +281,7 @@ function resolveParent(path: string, cache: FolderIdCache): { parentId: string; 
 
 // ── 앱 파일 읽기/쓰기 ───────────────────────────────────
 
-/** 경로(config.json, profile.md, saves/progress.json 등)로 앱 파일을 읽는다. JSON 확장자는 파싱해서 반환한다. */
+/** 경로(config.json, grammar.md, saves/progress.json 등)로 앱 파일을 읽는다. JSON 확장자는 파싱해서 반환한다. */
 export async function readAppFile<T>(path: string): Promise<T> {
   const cache = await ensureAppFolderStructure();
   const { parentId, fileName } = resolveParent(path, cache);
