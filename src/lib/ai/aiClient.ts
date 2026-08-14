@@ -17,25 +17,34 @@ function resolveApiKey(config: AppConfig): string {
   return key;
 }
 
+/** 사용자가 온보딩에서 직접 모델을 지정했으면 그 값을, 아니면 undefined(각 클라이언트 기본값 사용)를 반환한다. */
+function resolveModel(config: AppConfig): string | undefined {
+  const model = config.aiProvider === 'gemini' ? config.geminiModel : config.claudeModel;
+  return model?.trim() || undefined;
+}
+
 export async function generateFillBlankQuestion(
   config: AppConfig,
   word: WordEntry | undefined,
   contextSummary: string
 ): Promise<FillBlankQuestion> {
   const apiKey = resolveApiKey(config);
+  const model = resolveModel(config);
   return config.aiProvider === 'gemini'
-    ? gemini.generateFillBlankQuestion(apiKey, word, contextSummary)
-    : claude.generateFillBlankQuestion(apiKey, word, contextSummary);
+    ? gemini.generateFillBlankQuestion(apiKey, word, contextSummary, model)
+    : claude.generateFillBlankQuestion(apiKey, word, contextSummary, model);
 }
 
 export async function generateTranslateQuestion(
   config: AppConfig,
-  contextSummary: string
+  contextSummary: string,
+  words?: WordEntry[]
 ): Promise<{ koreanSentence: string }> {
   const apiKey = resolveApiKey(config);
+  const model = resolveModel(config);
   return config.aiProvider === 'gemini'
-    ? gemini.generateTranslateQuestion(apiKey, contextSummary)
-    : claude.generateTranslateQuestion(apiKey, contextSummary);
+    ? gemini.generateTranslateQuestion(apiKey, contextSummary, words, model)
+    : claude.generateTranslateQuestion(apiKey, contextSummary, words, model);
 }
 
 export async function gradeTranslation(
@@ -44,9 +53,10 @@ export async function gradeTranslation(
   userAnswer: string
 ): Promise<TranslateGradeResult> {
   const apiKey = resolveApiKey(config);
+  const model = resolveModel(config);
   return config.aiProvider === 'gemini'
-    ? gemini.gradeTranslation(apiKey, koreanSentence, userAnswer)
-    : claude.gradeTranslation(apiKey, koreanSentence, userAnswer);
+    ? gemini.gradeTranslation(apiKey, koreanSentence, userAnswer, model)
+    : claude.gradeTranslation(apiKey, koreanSentence, userAnswer, model);
 }
 
 export async function gradeWordRecall(
@@ -56,9 +66,10 @@ export async function gradeWordRecall(
   userMeaning: string
 ): Promise<WordRecallGradeResult> {
   const apiKey = resolveApiKey(config);
+  const model = resolveModel(config);
   return config.aiProvider === 'gemini'
-    ? gemini.gradeWordRecall(apiKey, word, userReading, userMeaning)
-    : claude.gradeWordRecall(apiKey, word, userReading, userMeaning);
+    ? gemini.gradeWordRecall(apiKey, word, userReading, userMeaning, model)
+    : claude.gradeWordRecall(apiKey, word, userReading, userMeaning, model);
 }
 
 /** 현재 설정에 필요한 API 키가 채워져 있는지 확인한다. */

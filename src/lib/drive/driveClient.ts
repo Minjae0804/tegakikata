@@ -36,7 +36,7 @@ const DEFAULT_FILES: Record<string, string> = {
     '## N5\n' +
     '- 〜てください: 부드러운 요청/지시\n' +
     '- 〜ましょう: 권유\n',
-  'saves/progress.json': JSON.stringify({ entries: [] }, null, 2),
+  'saves/progress.json': JSON.stringify({ w: {} }, null, 2),
 };
 
 let accessToken: string | null = null;
@@ -115,6 +115,15 @@ export async function initDriveAuth(): Promise<void> {
 
 export function isDriveAuthenticated(): boolean {
   return accessToken !== null;
+}
+
+/** 드라이브 연결을 끊는다 — 액세스 토큰을 구글에 반납(revoke)하고 메모리에서 지운다. */
+export function signOutDrive(): void {
+  if (accessToken) {
+    window.google?.accounts.oauth2.revoke(accessToken, () => {});
+  }
+  accessToken = null;
+  tokenClient = null;
 }
 
 /** 현재 액세스 토큰을 그대로 반환한다 (Google Picker처럼 별도 라이브러리에 넘겨줘야 할 때 씀). */

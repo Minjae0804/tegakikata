@@ -98,8 +98,12 @@ export function ComponentShowcasePage() {
         </Section>
 
         <Section title="Game Mode Cards">
-          <GameModeCard mark="埋" title="빈칸 채우기" description="문장의 빈칸에 들어갈 한자를 필기로 입력해요." />
-          <GameModeCard mark="訳" title="문장 번역" description="한국어 문장을 일본어로 옮기면 AI가 채점해요." />
+          <div className="w-64">
+            <GameModeCard mark="埋" title="빈칸 채우기" description="문장의 빈칸에 들어갈 한자를 필기로 입력해요." />
+          </div>
+          <div className="w-64">
+            <GameModeCard mark="訳" title="문장 번역" description="한국어 문장을 일본어로 옮기면 AI가 채점해요." />
+          </div>
         </Section>
 
         <Section title="Onboarding Steps">

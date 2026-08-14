@@ -8,7 +8,7 @@
 // 아직 아무것도 선택 안 했으면 임시 샘플로 대체한다. "단어장 선택" 버튼으로 하위 폴더 -> CSV 파일
 // 순서로 탐색해서 원하는 파일만 골라 적용할 수 있다.
 // AI 예문 생성 시 grammar.md(useGrammarNotes)를 컨텍스트로 같이 넘긴다.
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { HandwritingFrame } from '../components/handwriting/HandwritingFrame';
 import { CandidateChips } from '../components/game/fill-blank/CandidateChips';
 import { HiraganaKeyboard } from '../components/game/fill-blank/HiraganaKeyboard';
@@ -17,16 +17,19 @@ import { ProgressStat } from '../components/common/ProgressStat';
 import { Button } from '../components/common/Button';
 import { useAppConfig } from '../hooks/useAppConfig';
 import { useWordBank } from '../hooks/useWordBank';
+import type { ProgressController } from '../hooks/useProgress';
 import { WordBankPicker } from '../components/wordbank/WordBankPicker';
 import { useGrammarNotes } from '../hooks/useGrammarNotes';
 import { generateFillBlankQuestion, hasRequiredApiKey } from '../lib/ai/aiClient';
+import { shuffle } from '../lib/wordbank/shuffle';
 import type { FillBlankQuestion } from '../types';
 
 interface FillBlankGamePageProps {
+  progress: ProgressController;
   onExit?: () => void;
 }
 
-export function FillBlankGamePage({ onExit }: FillBlankGamePageProps) {
+export function FillBlankGamePage({ progress, onExit }: FillBlankGamePageProps) {
   const { config } = useAppConfig(true);
   const wordBank = useWordBank(true);
   const { notes: grammarNotes } = useGrammarNotes(true);
@@ -48,6 +51,9 @@ export function FillBlankGamePage({ onExit }: FillBlankGamePageProps) {
   const [wordIndex, setWordIndex] = useState(0);
   const [inputMode, setInputMode] = useState<'kanji' | 'hiragana'>('kanji');
 
+  // CSV에 적힌 순서 그대로 반복 출제되지 않도록, 단어장이 (다시) 로드될 때마다 한 번 섞어둔다.
+  const shuffledWords = useMemo(() => shuffle(wordBank.words), [wordBank.words]);
+
   const enteredText = enteredChars.join('');
   const isCorrect = submitted && question !== null && enteredText === question.targetWord.kanji;
 
@@ -56,7 +62,7 @@ export function FillBlankGamePage({ onExit }: FillBlankGamePageProps) {
     setQuestionLoading(true);
     setQuestionError(null);
     try {
-      const word = wordBank.words.length > 0 ? wordBank.words[wordIndex % wordBank.words.length] : undefined;
+      const word = shuffledWords.length > 0 ? shuffledWords[wordIndex % shuffledWords.length] : undefined;
       const generated = await generateFillBlankQuestion(config, word, grammarNotes);
       setQuestion(generated);
     } catch (e) {
@@ -95,9 +101,14 @@ export function FillBlankGamePage({ onExit }: FillBlankGamePageProps) {
 
   const handleSubmit = () => {
     if (enteredChars.length === 0 || !question) return;
+    const correct = enteredText === question.targetWord.kanji;
     setSubmitted(true);
     setAnsweredCount((n) => n + 1);
-    if (enteredText === question.targetWord.kanji) setCorrectCount((n) => n + 1);
+    if (correct) setCorrectCount((n) => n + 1);
+    // AI가 즉석에서 지어낸 단어(단어장에 없는 단어)는 단어장-단어별 진도에 남기지 않는다.
+    if (wordBank.words.some((w) => w.id === question.targetWord.id)) {
+      progress.recordReview(question.targetWord.id, correct ? 'good' : 'again');
+    }
   };
 
   const handleNext = () => {
@@ -137,7 +148,7 @@ export function FillBlankGamePage({ onExit }: FillBlankGamePageProps) {
         )}
       </header>
 
-      <div className="flex items-center gap-6">
+      <div className="flex flex-wrap items-center gap-6">
         <ProgressStat label="맞은 문제" value={correctCount} suffix={`/${answeredCount}`} />
         {question && <ProgressStat label="JLPT" value={question.targetWord.jlptLevel ?? '-'} />}
         <ProgressStat label="단어 출처" value={wordBank.words.length > 0 ? '드라이브' : 'AI 생성'} />
@@ -197,22 +208,27 @@ export function FillBlankGamePage({ onExit }: FillBlankGamePageProps) {
             );
           })()}
 
-          {/* 입력한 글자를 쌓아 보여주는 칸 */}
+          {/* 입력한 글자를 쌓아 보여주는 칸. 히라가나 입력 모드일 땐 직접 타이핑도 되지만,
+              한자 입력(필기) 모드에서는 타이핑으로 답을 써버리면 필기 연습 의미가 없어지므로 막는다 —
+              캔버스 인식 결과로 고른 글자만 여기 이어붙는다. */}
           <div className="flex flex-col items-center gap-2">
-            <span className="font-body text-xs text-base-content/50">입력한 글자</span>
-            <div className="flex min-h-14 min-w-14 items-center gap-1 rounded-[var(--radius-box)] border-2 border-base-300 bg-base-100 px-4 py-2">
-              {enteredChars.length === 0 ? (
-                <span className="font-body text-xs text-base-content/30 select-none">
-                  아래에서 한 글자씩 써서 채워보세요
-                </span>
-              ) : (
-                enteredChars.map((char, i) => (
-                  <span key={i} className="font-jp text-2xl text-base-content">
-                    {char}
-                  </span>
-                ))
-              )}
-            </div>
+            <span className="font-body text-xs text-base-content/50">
+              입력한 글자{inputMode === 'hiragana' ? ' — 눌러서 직접 입력도 가능해요' : ''}
+            </span>
+            <input
+              type="text"
+              value={enteredText}
+              onChange={(e) => setEnteredChars(Array.from(e.target.value))}
+              readOnly={submitted || inputMode === 'kanji'}
+              placeholder={
+                inputMode === 'hiragana'
+                  ? '여기를 눌러 타이핑하거나, 아래 버튼으로 히라가나를 입력하세요'
+                  : '아래 캔버스에 한자를 필기해서 채워보세요'
+              }
+              className="font-jp min-h-14 w-64 rounded-[var(--radius-box)] border-2 border-base-300 bg-base-100
+                         px-4 py-2 text-center text-2xl text-base-content placeholder:font-body placeholder:text-xs
+                         placeholder:text-base-content/30"
+            />
             {!submitted && enteredChars.length > 0 && (
               <Button variant="ghost" size="sm" onClick={handleRemoveLast}>
                 마지막 글자 지우기
@@ -280,6 +296,9 @@ export function FillBlankGamePage({ onExit }: FillBlankGamePageProps) {
                     : `아쉬워요, 정답은 「${question.targetWord.kanji}(${question.targetWord.reading})」예요. (입력한 답: 「${enteredText}」)`
                 }
               />
+              {question.translation && (
+                <p className="font-body text-xs text-base-content/50">문장 해석: {question.translation}</p>
+              )}
               <Button variant="primary" onClick={handleNext}>
                 다음 문제
               </Button>

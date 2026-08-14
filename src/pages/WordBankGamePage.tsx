@@ -13,18 +13,20 @@ import { ProgressStat } from '../components/common/ProgressStat';
 import { Button } from '../components/common/Button';
 import { useAppConfig } from '../hooks/useAppConfig';
 import { useWordBank } from '../hooks/useWordBank';
+import type { ProgressController } from '../hooks/useProgress';
 import { WordBankPicker } from '../components/wordbank/WordBankPicker';
 import { gradeWordRecall, hasRequiredApiKey } from '../lib/ai/aiClient';
 import { shuffle } from '../lib/wordbank/shuffle';
 import type { WordRecallGradeResult } from '../types';
 
 interface WordBankGamePageProps {
+  progress: ProgressController;
   onExit?: () => void;
 }
 
 type Direction = 'toKanji' | 'toReading';
 
-export function WordBankGamePage({ onExit }: WordBankGamePageProps) {
+export function WordBankGamePage({ progress, onExit }: WordBankGamePageProps) {
   const { config } = useAppConfig(true);
   const wordBank = useWordBank(true);
 
@@ -87,9 +89,12 @@ export function WordBankGamePage({ onExit }: WordBankGamePageProps) {
   /** "뜻·읽기 → 한자" 채점 — AI 미사용, 단어장 데이터와 문자열 그대로 비교. */
   const handleSubmitKanji = () => {
     if (enteredChars.length === 0 || !word) return;
+    const correct = enteredText === word.kanji;
     setSubmitted(true);
     setAnsweredCount((n) => n + 1);
-    if (enteredText === word.kanji) setCorrectCount((n) => n + 1);
+    if (correct) setCorrectCount((n) => n + 1);
+    // 단어장-단어별 학습 진도(SRS)에 이번 결과를 반영한다 — 정답은 "보통", 오답은 "다시"로 취급.
+    progress.recordReview(word.id, correct ? 'good' : 'again');
   };
 
   /** "한자 → 읽기·뜻" 채점 — AI 사용. */
@@ -102,7 +107,9 @@ export function WordBankGamePage({ onExit }: WordBankGamePageProps) {
       const graded = await gradeWordRecall(config, word, readingText.trim(), meaningAnswer.trim());
       setRecallResult(graded);
       setAnsweredCount((n) => n + 1);
-      if (graded.readingCorrect && graded.meaningCorrect) setCorrectCount((n) => n + 1);
+      const correct = graded.readingCorrect && graded.meaningCorrect;
+      if (correct) setCorrectCount((n) => n + 1);
+      progress.recordReview(word.id, correct ? 'good' : 'again');
     } catch (e) {
       setGradeError(e instanceof Error ? e.message : '채점에 실패했습니다.');
     } finally {
@@ -208,21 +215,26 @@ export function WordBankGamePage({ onExit }: WordBankGamePageProps) {
                 <p className="font-jp text-base text-base-content/50">{word.reading}</p>
               </div>
 
+              {/* 한자 입력(필기) 모드에서는 타이핑으로 답을 써버리면 필기 연습 의미가 없어지므로
+                  직접 입력을 막는다 — 히라가나 입력 모드일 때만 타이핑 허용 */}
               <div className="flex flex-col items-center gap-2">
-                <span className="font-body text-xs text-base-content/50">입력한 글자</span>
-                <div className="flex min-h-14 min-w-14 items-center gap-1 rounded-[var(--radius-box)] border-2 border-base-300 bg-base-100 px-4 py-2">
-                  {enteredChars.length === 0 ? (
-                    <span className="font-body text-xs text-base-content/30 select-none">
-                      아래에서 한 글자씩 써서 채워보세요
-                    </span>
-                  ) : (
-                    enteredChars.map((char, i) => (
-                      <span key={i} className="font-jp text-2xl text-base-content">
-                        {char}
-                      </span>
-                    ))
-                  )}
-                </div>
+                <span className="font-body text-xs text-base-content/50">
+                  입력한 글자{inputMode === 'hiragana' ? ' — 눌러서 직접 입력도 가능해요' : ''}
+                </span>
+                <input
+                  type="text"
+                  value={enteredText}
+                  onChange={(e) => setEnteredChars(Array.from(e.target.value))}
+                  readOnly={submitted || inputMode === 'kanji'}
+                  placeholder={
+                    inputMode === 'hiragana'
+                      ? '여기를 눌러 타이핑하거나, 아래 버튼으로 히라가나를 입력하세요'
+                      : '아래 캔버스에 한자를 필기해서 채워보세요'
+                  }
+                  className="font-jp min-h-14 w-64 rounded-[var(--radius-box)] border-2 border-base-300 bg-base-100
+                             px-4 py-2 text-center text-2xl text-base-content placeholder:font-body placeholder:text-xs
+                             placeholder:text-base-content/30"
+                />
                 {!submitted && enteredChars.length > 0 && (
                   <Button variant="ghost" size="sm" onClick={() => setEnteredChars((prev) => prev.slice(0, -1))}>
                     마지막 글자 지우기
@@ -310,20 +322,16 @@ export function WordBankGamePage({ onExit }: WordBankGamePageProps) {
               {!blockedByMissingApiKey && recallResult === null && (
                 <div className="flex flex-col gap-4">
                   <div className="flex flex-col items-center gap-2">
-                    <span className="font-body text-xs text-base-content/50">읽기 (히라가나)</span>
-                    <div className="flex min-h-14 min-w-14 items-center gap-1 rounded-[var(--radius-box)] border-2 border-base-300 bg-base-100 px-4 py-2">
-                      {readingChars.length === 0 ? (
-                        <span className="font-body text-xs text-base-content/30 select-none">
-                          아래 버튼으로 히라가나를 입력하세요
-                        </span>
-                      ) : (
-                        readingChars.map((char, i) => (
-                          <span key={i} className="font-jp text-2xl text-base-content">
-                            {char}
-                          </span>
-                        ))
-                      )}
-                    </div>
+                    <span className="font-body text-xs text-base-content/50">읽기 (히라가나) — 눌러서 직접 입력도 가능해요</span>
+                    <input
+                      type="text"
+                      value={readingText}
+                      onChange={(e) => setReadingChars(Array.from(e.target.value))}
+                      placeholder="여기를 눌러 타이핑하거나, 아래 버튼으로 히라가나를 입력하세요"
+                      className="font-jp min-h-14 w-64 rounded-[var(--radius-box)] border-2 border-base-300 bg-base-100
+                                 px-4 py-2 text-center text-2xl text-base-content placeholder:font-body placeholder:text-xs
+                                 placeholder:text-base-content/30"
+                    />
                     {readingChars.length > 0 && (
                       <Button variant="ghost" size="sm" onClick={() => setReadingChars((prev) => prev.slice(0, -1))}>
                         마지막 글자 지우기

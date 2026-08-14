@@ -14,7 +14,7 @@ export function GameModeCard({ mark, title, description, onClick, children }: Ga
     <button
       type="button"
       onClick={onClick}
-      className="group flex w-64 flex-col gap-4 rounded-[var(--radius-box)] border-2 border-base-300
+      className="group flex w-full flex-col gap-4 rounded-[var(--radius-box)] border-2 border-base-300
                  bg-base-100 p-5 text-left transition-colors hover:border-primary"
     >
       <span

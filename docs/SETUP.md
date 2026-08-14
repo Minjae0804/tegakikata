@@ -60,12 +60,9 @@ npm run build     # 빌드
 
 ## 4. AI API 키 (Gemini / Claude)
 
-앱은 **온보딩 화면에서 사용자가 직접** Gemini 또는 Claude 중 하나를 고르고 API 키를 입력한다 (BYOK 방식, 배포자가 미리 넣어줄 필요 없음). 각자 발급 방법:
+앱은 **온보딩 화면에서 사용자가 직접** Gemini 또는 Claude 중 하나를 고르고 API 키(+선택적으로 모델)를 입력한다 (BYOK 방식, 배포자가 미리 넣어줄 필요 없음). 두 프로바이더 다 브라우저에서 직접 API를 호출하는 구조라, 서버 없이도 동작한다.
 
-- **Gemini**: [aistudio.google.com/apikey](https://aistudio.google.com/apikey)에서 발급. ⚠️ 2026년 8월 기준, 신규/휴면 상태의 "표준(제한 없는) 키"가 계정·결제 여부와 무관하게 `403 Your project has been denied access`로 막히는 구글 쪽 이슈가 보고되고 있다. 안 되면 AI Studio에서 새 키를 발급(자동으로 서비스 계정에 바인딩된 최신 포맷으로 생성됨)해서 재시도할 것.
-- **Claude**: [platform.claude.com](https://platform.claude.com)(개발자 콘솔)에서 발급. `claude.ai` Pro/Max 구독과는 별개 계정/과금 체계다.
-
-두 프로바이더 다 브라우저에서 직접 API를 호출하는 구조라, 서버 없이도 동작한다.
+발급 방법과 현재 어느 쪽을 권장하는지는 [AI API 키 발급](API_KEYS.md)에 정리해뒀다.
 
 ## 5. 배포 (GitHub Pages)
 

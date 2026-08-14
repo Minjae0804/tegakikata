@@ -9,6 +9,7 @@ import { useEffect, useState } from 'react';
 import { useDriveSync } from '../hooks/useDriveSync';
 import { useAppConfig } from '../hooks/useAppConfig';
 import { hasRequiredApiKey } from '../lib/ai/aiClient';
+import { AiConfigForm } from '../components/settings/AiConfigForm';
 import { OnboardingStepCard } from '../components/onboarding/OnboardingStepCard';
 import { Button } from '../components/common/Button';
 import { getCached, setCached } from '../lib/storage/localCache';
@@ -34,6 +35,8 @@ export function OnboardingPage({ onComplete }: OnboardingPageProps) {
   const [aiProvider, setAiProvider] = useState<AiProvider>('claude');
   const [geminiApiKey, setGeminiApiKey] = useState('');
   const [claudeApiKey, setClaudeApiKey] = useState('');
+  const [geminiModel, setGeminiModel] = useState('');
+  const [claudeModel, setClaudeModel] = useState('');
   const isReturningUser = Boolean(getCached<boolean>(ONBOARDED_CACHE_KEY));
 
   // config가 드라이브에서 로드되면(재방문 시 기존 값 포함) 입력창 초기값으로 반영한다.
@@ -42,14 +45,25 @@ export function OnboardingPage({ onComplete }: OnboardingPageProps) {
     setAiProvider(config.aiProvider ?? 'claude');
     if (config.geminiApiKey) setGeminiApiKey(config.geminiApiKey);
     if (config.claudeApiKey) setClaudeApiKey(config.claudeApiKey);
+    if (config.geminiModel) setGeminiModel(config.geminiModel);
+    if (config.claudeModel) setClaudeModel(config.claudeModel);
   }, [config]);
 
   const currentKey = aiProvider === 'gemini' ? geminiApiKey : claudeApiKey;
   const setCurrentKey = aiProvider === 'gemini' ? setGeminiApiKey : setClaudeApiKey;
+  const currentModel = aiProvider === 'gemini' ? geminiModel : claudeModel;
+  const setCurrentModel = aiProvider === 'gemini' ? setGeminiModel : setClaudeModel;
 
   const handleSaveApiKey = async () => {
     if (!currentKey.trim()) return;
-    await updateConfig({ aiProvider, geminiApiKey, claudeApiKey, [`${aiProvider}ApiKey`]: currentKey.trim() });
+    await updateConfig({
+      aiProvider,
+      geminiApiKey,
+      claudeApiKey,
+      geminiModel,
+      claudeModel,
+      [`${aiProvider}ApiKey`]: currentKey.trim(),
+    });
   };
 
   const handleComplete = () => {
@@ -151,43 +165,15 @@ export function OnboardingPage({ onComplete }: OnboardingPageProps) {
 
       {driveReady && (
         <div className="flex flex-col gap-3">
-          <div className="flex flex-col gap-1.5">
-            <span className="font-body text-xs text-base-content/60">AI 프로바이더</span>
-            <div className="flex gap-2">
-              <button
-                type="button"
-                onClick={() => setAiProvider('claude')}
-                className={`btn btn-sm flex-1 rounded-[var(--radius-field)] ${
-                  aiProvider === 'claude' ? 'btn-primary' : 'btn-outline'
-                }`}
-              >
-                Claude
-              </button>
-              <button
-                type="button"
-                onClick={() => setAiProvider('gemini')}
-                className={`btn btn-sm flex-1 rounded-[var(--radius-field)] ${
-                  aiProvider === 'gemini' ? 'btn-primary' : 'btn-outline'
-                }`}
-              >
-                Gemini
-              </button>
-            </div>
-          </div>
-
-          <label className="flex flex-col gap-1.5">
-            <span className="font-body text-xs text-base-content/60">
-              {aiProvider === 'gemini' ? 'Gemini' : 'Claude'} API 키
-            </span>
-            <input
-              type="password"
-              value={currentKey}
-              onChange={(e) => setCurrentKey(e.target.value)}
-              placeholder={aiProvider === 'gemini' ? 'AIza... 또는 AQ...' : 'sk-ant-...'}
-              className="input input-bordered w-full rounded-[var(--radius-field)] font-data text-xs"
-              disabled={configLoading}
-            />
-          </label>
+          <AiConfigForm
+            aiProvider={aiProvider}
+            onProviderChange={setAiProvider}
+            apiKey={currentKey}
+            onApiKeyChange={setCurrentKey}
+            model={currentModel}
+            onModelChange={setCurrentModel}
+            disabled={configLoading}
+          />
 
           {configError && <p className="font-body text-xs text-secondary">{configError}</p>}
 

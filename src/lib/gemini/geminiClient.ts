@@ -8,9 +8,9 @@
 import { GoogleGenAI, Type } from '@google/genai';
 import type { FillBlankQuestion, TranslateGradeResult, WordEntry, WordRecallGradeResult } from '../../types';
 
-// 모델명은 Gemini 쪽에서 종종 바뀌므로, 실제로 안 되면 https://ai.google.dev/api/models 에서
-// 최신 모델명을 확인해 이 상수만 바꾸면 된다.
-const GEMINI_MODEL = 'gemini-3.6-flash';
+// 기본 모델명. 사용자가 온보딩에서 직접 모델을 지정하면(config.geminiModel) 그 값을 대신 쓴다.
+// 실제로 안 되면 https://ai.google.dev/api/models 에서 최신 모델명을 확인할 것.
+export const DEFAULT_GEMINI_MODEL = 'gemini-3.6-flash';
 
 function client(apiKey: string): GoogleGenAI {
   return new GoogleGenAI({ apiKey });
@@ -19,11 +19,12 @@ function client(apiKey: string): GoogleGenAI {
 async function generateJson(
   apiKey: string,
   prompt: string,
-  responseSchema: Record<string, unknown>
+  responseSchema: Record<string, unknown>,
+  model: string = DEFAULT_GEMINI_MODEL
 ): Promise<unknown> {
   const ai = client(apiKey);
   const response = await ai.models.generateContent({
-    model: GEMINI_MODEL,
+    model,
     contents: prompt,
     config: {
       responseMimeType: 'application/json',
@@ -48,7 +49,8 @@ async function generateJson(
 export async function generateFillBlankQuestion(
   apiKey: string,
   word: WordEntry | undefined,
-  contextSummary: string
+  contextSummary: string,
+  model?: string
 ): Promise<FillBlankQuestion> {
   if (word) {
     const prompt = `당신은 일본어 학습 앱의 문제 출제자입니다.
@@ -64,22 +66,34 @@ export async function generateFillBlankQuestion(
   빈칸으로 만들고 그걸 정답인 척하는 것 — 이런 식으로 단어를 쪼개거나, 단어의 글자가
   우연히 다른 곳에 흩어져 있는 걸 정답 취급하면 절대 안 됨. "${word.kanji}"라는
   글자 뭉치가 문장에 실제로 이어져서 나와야 함
+- 매우 중요: "${word.kanji}"는 활용하지 말고 사전형(원형) 그대로 문장에 넣을 것. 동사/형용사처럼
+  활용되는 품사라면, 사전형이 자연스럽게 오는 문형을 골라서 쓸 것 — 예: 〜ことにする, 〜ことが
+  できる, 〜前に, 〜つもりだ, 〜ように, 〜という, 또는 명사를 수식하는 자리(사전형+명사)처럼
+  사전형 뒤에 오는 구조. "食べました/食べています"처럼 활용해서 "${word.kanji}"라는 글자
+  뭉치가 문장에 그대로 안 보이게 되는 건 절대 안 됨 — 활용형으로 바꾸느니 사전형이 자연스럽게
+  들어가는 다른 문형/상황을 고를 것
 - 예문은 JLPT 레벨에 맞는 난이도로 작성할 것
 - 실제 일상 대화나 상황에서 쓸 법한 자연스럽고 구체적인 문장으로 작성할 것.
   "私は___です" 같은 밋밋하고 뻔한 정의문/공식 틀은 피할 것 — 시간, 장소, 인물,
   이유 등 구체적인 맥락이 담긴 문장이 좋음
-- 문장은 한 개만 작성할 것`;
+- 문장은 한 개만 작성할 것
+- translation: 그 예문 전체를(빈칸 부분까지 포함해서, 즉 정답 단어가 채워진 완성된 문장 기준으로)
+  자연스러운 한국어로 번역할 것. 답 확인할 때 학습자에게 보여줄 해석이라 정확하고 자연스러워야 함`;
 
     const schema = {
       type: Type.OBJECT,
       properties: {
         sentence: { type: Type.STRING, description: '빈칸이 ___ 로 표시된 일본어 예문' },
+        translation: { type: Type.STRING, description: '예문 전체의 한국어 해석' },
       },
-      required: ['sentence'],
+      required: ['sentence', 'translation'],
     };
 
-    const result = (await generateJson(apiKey, prompt, schema)) as { sentence: string };
-    return { sentence: result.sentence, targetWord: word };
+    const result = (await generateJson(apiKey, prompt, schema, model)) as {
+      sentence: string;
+      translation: string;
+    };
+    return { sentence: result.sentence, targetWord: word, translation: result.translation };
   }
 
   const prompt = `당신은 일본어 학습 앱의 문제 출제자입니다.
@@ -100,7 +114,9 @@ export async function generateFillBlankQuestion(
 - 실제 일상 대화나 상황에서 쓸 법한 자연스럽고 구체적인 문장으로 작성할 것.
   "私は___です" 같은 밋밋하고 뻔한 정의문/공식 틀은 피할 것 — 시간, 장소, 인물,
   이유 등 구체적인 맥락이 담긴 문장이 좋음
-- 문장은 한 개만 작성`;
+- 문장은 한 개만 작성
+- translation: 그 예문 전체를(빈칸이 정답으로 채워진 완성된 문장 기준으로) 자연스러운 한국어로
+  번역할 것. 답 확인할 때 학습자에게 보여줄 해석이라 정확하고 자연스러워야 함`;
 
   const schema = {
     type: Type.OBJECT,
@@ -110,16 +126,18 @@ export async function generateFillBlankQuestion(
       meaning: { type: Type.STRING },
       jlptLevel: { type: Type.STRING, enum: ['N5', 'N4', 'N3', 'N2', 'N1'] },
       sentence: { type: Type.STRING },
+      translation: { type: Type.STRING, description: '예문 전체의 한국어 해석' },
     },
-    required: ['kanji', 'reading', 'meaning', 'jlptLevel', 'sentence'],
+    required: ['kanji', 'reading', 'meaning', 'jlptLevel', 'sentence', 'translation'],
   };
 
-  const result = (await generateJson(apiKey, prompt, schema)) as {
+  const result = (await generateJson(apiKey, prompt, schema, model)) as {
     kanji: string;
     reading: string;
     meaning: string;
     jlptLevel: WordEntry['jlptLevel'];
     sentence: string;
+    translation: string;
   };
 
   return {
@@ -131,14 +149,29 @@ export async function generateFillBlankQuestion(
       meaning: result.meaning,
       jlptLevel: result.jlptLevel,
     },
+    translation: result.translation,
   };
 }
 
-/** 학습 컨텍스트를 바탕으로 번역 게임용 한국어 문장을 생성한다. */
+/**
+ * 학습 컨텍스트를 바탕으로 번역 게임용 한국어 문장을 생성한다.
+ * words를 주면 그 단어들의 뜻이 전부 자연스럽게 들어가는 문장을 만들어서, 번역하면 그 단어들을
+ * 쓰게 유도한다 (한 문제에 2~7개 — 문장 난이도를 위해 개수는 호출부에서 정해서 넘긴다).
+ */
 export async function generateTranslateQuestion(
   apiKey: string,
-  contextSummary: string
+  contextSummary: string,
+  words?: WordEntry[],
+  model?: string
 ): Promise<{ koreanSentence: string }> {
+  const wordRequirement =
+    words && words.length > 0
+      ? `- 문장 안에 다음 단어들의 뜻이 전부 자연스럽게 들어가야 함. 번역할 때 학습자가 이 단어들을
+  실제로 쓰게 되는 문장이어야 함(억지로 다 우겨넣어서 문장이 부자연스러워지면 안 되고, 자연스럽게
+  하나의 상황/문맥으로 엮을 것):
+  ${words.map((w) => `"${w.meaning}"(일본어로는 ${w.kanji}/${w.reading})`).join(', ')}`
+      : '';
+
   const prompt = `당신은 일본어 학습 앱의 문제 출제자입니다.
 한국어 문장 하나를 만들어주세요. 학습자가 이 문장을 일본어로 번역하는 연습을 할 거예요.
 
@@ -147,6 +180,7 @@ export async function generateTranslateQuestion(
 요구사항:
 - 일상 대화에서 쓸 법한 자연스러운 한국어 문장
 - 학습자 수준에 맞는 문법/어휘 난이도
+${wordRequirement}
 - 한 문장만 작성`;
 
   const schema = {
@@ -157,14 +191,15 @@ export async function generateTranslateQuestion(
     required: ['koreanSentence'],
   };
 
-  return (await generateJson(apiKey, prompt, schema)) as { koreanSentence: string };
+  return (await generateJson(apiKey, prompt, schema, model)) as { koreanSentence: string };
 }
 
 /** 사용자의 일본어 번역이 원문 의미를 잘 전달하는지 채점한다. */
 export async function gradeTranslation(
   apiKey: string,
   koreanSentence: string,
-  userAnswer: string
+  userAnswer: string,
+  model?: string
 ): Promise<TranslateGradeResult> {
   const prompt = `당신은 일본어 학습 앱의 채점자입니다.
 아래 한국어 문장을 사용자가 일본어로 번역했습니다. 의미와 문법을 기준으로 채점해주세요.
@@ -186,7 +221,7 @@ export async function gradeTranslation(
     required: ['isCorrect', 'feedback'],
   };
 
-  return (await generateJson(apiKey, prompt, schema)) as TranslateGradeResult;
+  return (await generateJson(apiKey, prompt, schema, model)) as TranslateGradeResult;
 }
 
 /**
@@ -197,7 +232,8 @@ export async function gradeWordRecall(
   apiKey: string,
   word: WordEntry,
   userReading: string,
-  userMeaning: string
+  userMeaning: string,
+  model?: string
 ): Promise<WordRecallGradeResult> {
   const prompt = `당신은 일본어 학습 앱의 채점자입니다.
 아래 한자 단어를 보고 사용자가 읽기(히라가나)와 뜻(한국어)을 답했습니다. 각각 채점해주세요.
@@ -225,5 +261,5 @@ export async function gradeWordRecall(
     required: ['readingCorrect', 'meaningCorrect', 'feedback'],
   };
 
-  return (await generateJson(apiKey, prompt, schema)) as WordRecallGradeResult;
+  return (await generateJson(apiKey, prompt, schema, model)) as WordRecallGradeResult;
 }

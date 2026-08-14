@@ -1,16 +1,19 @@
 // 드라이브 wordbanks/ 폴더를 하위 폴더 -> CSV 파일 순으로 탐색하고,
 // 실제로 게임에서 쓸 CSV 파일들을 체크박스로 골라 "적용"하는 피커.
 //
-// 두 가지 방법으로 CSV를 확보할 수 있다:
+// 세 가지 방법으로 CSV를 확보할 수 있다:
 // 1) "내 드라이브에서 파일 선택" — Google Picker로, 앱이 만들지 않은 기존 CSV도
 //    사용자가 직접 골라서 접근 권한을 부여할 수 있다 (drive.file 스코프의 정식 우회로).
-// 2) "새 단어장 만들기" — 앱이 직접 wordbanks/ 안에 CSV를 생성한다 (앱이 만든 파일이라
-//    나중에 검색으로도 항상 접근 가능).
-import { useState } from 'react';
+// 2) "CSV 파일 업로드" — 로컬 파일(예: AI로 만든 단어장, docs/WORDBANK_AI_PROMPT.md 참고)을
+//    올리면 형식(필수 컬럼/유효 행)을 먼저 검증하고, 통과하면 wordbanks/ 에 자동 저장한다.
+// 3) "새 단어장 만들기" — 앱 안에서 파일 이름과 CSV 내용을 직접 입력해 생성한다.
+// 2), 3)은 앱이 직접 만든 파일이라 나중에 검색으로도 항상 접근 가능하다.
+import { useRef, useState } from 'react';
 import { Button } from '../common/Button';
 import type { WordBankFileRef } from '../../hooks/useWordBank';
 import { openCsvFilePicker } from '../../lib/drive/picker';
 import { writeAppFile } from '../../lib/drive/driveClient';
+import { parseWordBankCsv } from '../../lib/wordbank/csv';
 
 interface WordBankPickerProps {
   rootFolderId: string | null;
@@ -53,6 +56,12 @@ export function WordBankPicker({
   const [newCsvText, setNewCsvText] = useState(NEW_WORDBANK_TEMPLATE);
   const [creating, setCreating] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
+
+  // CSV 파일 업로드 (로컬 파일 -> 형식 검증 -> wordbanks/ 자동 저장)
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [uploading, setUploading] = useState(false);
+  const [uploadError, setUploadError] = useState<string | null>(null);
+  const [uploadSuccess, setUploadSuccess] = useState<string | null>(null);
 
   const handleEnterFolder = (folderId: string) => {
     setCurrentFolderId(folderId);
@@ -100,6 +109,29 @@ export function WordBankPicker({
       setPickerError(e instanceof Error ? e.message : '파일 선택에 실패했습니다.');
     } finally {
       setPickerLoading(false);
+    }
+  };
+
+  /** 로컬 CSV 파일을 읽어 형식(필수 컬럼/유효 행)을 먼저 검증하고, 통과하면 wordbanks/ 에 저장한다. */
+  const handleUploadFile = async (file: File) => {
+    setUploading(true);
+    setUploadError(null);
+    setUploadSuccess(null);
+    try {
+      const text = await file.text();
+      const entries = parseWordBankCsv(text); // 필수 컬럼이 없으면 여기서 에러를 던짐
+      if (entries.length === 0) {
+        throw new Error('유효한 단어가 하나도 없어요. kanji/reading/meaning 값이 채워진 행이 있는지 확인해주세요.');
+      }
+      const fileName = file.name.endsWith('.csv') ? file.name : `${file.name}.csv`;
+      await writeAppFile(`wordbanks/${fileName}`, text);
+      setUploadSuccess(`"${fileName}" — 단어 ${entries.length}개 확인 후 저장했어요.`);
+      onBrowse(currentFolderId ?? rootFolderId ?? undefined); // 새로 올린 파일이 목록에 보이도록 새로고침
+    } catch (e) {
+      setUploadError(e instanceof Error ? e.message : '파일을 업로드하지 못했습니다.');
+    } finally {
+      setUploading(false);
+      if (fileInputRef.current) fileInputRef.current.value = '';
     }
   };
 
@@ -190,6 +222,37 @@ export function WordBankPicker({
         {pickerError && <p className="font-body text-xs text-secondary">{pickerError}</p>}
         <p className="font-body text-xs text-base-content/40">
           직접 만들어둔 CSV 파일은 이 방법으로 골라야 앱이 접근할 수 있어요.
+        </p>
+      </div>
+
+      <div className="flex flex-col gap-2 border-t border-base-300 pt-3">
+        <span className="font-body text-xs text-base-content/60">CSV 파일 업로드</span>
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept=".csv,text/csv"
+          onChange={(e) => {
+            const file = e.target.files?.[0];
+            if (file) void handleUploadFile(file);
+          }}
+          disabled={uploading}
+          className="file-input file-input-bordered file-input-sm w-full rounded-[var(--radius-field)] text-xs"
+        />
+        {uploading && <p className="font-body text-xs text-base-content/50">형식 확인하고 저장하는 중...</p>}
+        {uploadError && <p className="font-body text-xs text-secondary">{uploadError}</p>}
+        {uploadSuccess && <p className="font-body text-xs text-primary">{uploadSuccess}</p>}
+        <p className="font-body text-xs text-base-content/40">
+          형식(필수 컬럼 kanji/reading/meaning, 유효한 행 존재 여부)을 확인한 뒤 통과하면
+          wordbanks/ 에 자동으로 저장돼요. AI로 단어장을 만들었다면 이 방법이 가장 빠릅니다 —{' '}
+          <a
+            href="https://github.com/Minjae0804/tegakikata/blob/main/docs/WORDBANK_AI_PROMPT.md"
+            target="_blank"
+            rel="noreferrer"
+            className="underline"
+          >
+            AI로 단어장 만들기
+          </a>
+          .
         </p>
       </div>
 
