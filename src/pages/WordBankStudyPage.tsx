@@ -7,6 +7,8 @@ import { useEffect, useState } from 'react';
 import { ProgressStat } from '../components/common/ProgressStat';
 import { Button } from '../components/common/Button';
 import { JlptBadge } from '../components/common/JlptBadge';
+import { HandwritingFrame } from '../components/handwriting/HandwritingFrame';
+import { CandidateChips } from '../components/game/fill-blank/CandidateChips';
 import { useWordBank } from '../hooks/useWordBank';
 import type { ProgressController } from '../hooks/useProgress';
 import { WordBankPicker } from '../components/wordbank/WordBankPicker';
@@ -35,6 +37,19 @@ export function WordBankStudyPage({ progress, onExit }: WordBankStudyPageProps) 
   const [studyAll, setStudyAll] = useState(false);
   const [flipped, setFlipped] = useState(false);
 
+  // 손으로 써보기(선택) — 채점하지 않는 순수 연습용. 카드가 바뀔 때마다 초기화한다.
+  const [writingOpen, setWritingOpen] = useState(false);
+  const [practiceChars, setPracticeChars] = useState<string[]>([]);
+  const [practiceCandidates, setPracticeCandidates] = useState<string[]>([]);
+  const [practiceCanvasKey, setPracticeCanvasKey] = useState(0);
+
+  const resetPractice = () => {
+    setWritingOpen(false);
+    setPracticeChars([]);
+    setPracticeCandidates([]);
+    setPracticeCanvasKey((k) => k + 1);
+  };
+
   // 이번 세션에서 풀 카드들. "다시"를 고르면 이 큐 안에서 몇 장 뒤로 다시 끼워넣는다(Anki처럼).
   const [queue, setQueue] = useState<WordEntry[]>([]);
   const [seeded, setSeeded] = useState(false);
@@ -60,6 +75,7 @@ export function WordBankStudyPage({ progress, onExit }: WordBankStudyPageProps) 
     setSeeded(true);
     setSessionCounts({ again: 0, hard: 0, good: 0, easy: 0 });
     setFlipped(false);
+    resetPractice();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [wordBank.words, wordBank.wordsLoading, progress.loading, studyAll]);
 
@@ -86,6 +102,7 @@ export function WordBankStudyPage({ progress, onExit }: WordBankStudyPageProps) 
       return [...rest.slice(0, insertAt), word, ...rest.slice(insertAt)];
     });
     setFlipped(false);
+    resetPractice();
   };
 
   const handleStudyAllAnyway = () => {
@@ -98,6 +115,7 @@ export function WordBankStudyPage({ progress, onExit }: WordBankStudyPageProps) 
     setInitialQueueSize(due.length);
     setSessionCounts({ again: 0, hard: 0, good: 0, easy: 0 });
     setFlipped(false);
+    resetPractice();
   };
 
   return (
@@ -197,6 +215,53 @@ export function WordBankStudyPage({ progress, onExit }: WordBankStudyPageProps) 
               <p className="font-body pt-2 text-xs text-base-content/40">탭해서 답 보기</p>
             )}
           </div>
+
+          {/* 손으로 써보기 — 채점하지 않는 순수 연습용. 답을 이미 봤으니 그걸 보고 따라 써도 되고,
+              가리고 기억나는 대로 써봐도 된다. 다시/어려움/보통/쉬움 평가와는 무관하다. */}
+          {flipped && (
+            <div className="flex w-full max-w-sm flex-col items-center gap-3">
+              <Button variant="ghost" size="sm" onClick={() => setWritingOpen((v) => !v)}>
+                {writingOpen ? '손으로 써보기 닫기' : '✏️ 이 단어 손으로 써보기'}
+              </Button>
+
+              {writingOpen && (
+                <div className="flex flex-col items-center gap-3 rounded-[var(--radius-box)] border border-base-300 bg-base-100 p-4">
+                  <div className="flex min-h-11 items-center gap-1 rounded-[var(--radius-field)] border-2 border-base-300 bg-base-100 px-3 py-1.5">
+                    {practiceChars.length === 0 ? (
+                      <span className="font-body text-xs text-base-content/30 select-none">
+                        연습 삼아 「{word.kanji}」를 써보세요
+                      </span>
+                    ) : (
+                      practiceChars.map((char, i) => (
+                        <span key={i} className="font-jp text-xl text-base-content">
+                          {char}
+                        </span>
+                      ))
+                    )}
+                  </div>
+
+                  <HandwritingFrame key={practiceCanvasKey} onRecognize={setPracticeCandidates} onClear={() => setPracticeCandidates([])} />
+
+                  {practiceCandidates.length > 0 && (
+                    <CandidateChips
+                      candidates={practiceCandidates}
+                      onSelect={(c) => {
+                        setPracticeChars((prev) => [...prev, c]);
+                        setPracticeCandidates([]);
+                        setPracticeCanvasKey((k) => k + 1);
+                      }}
+                    />
+                  )}
+
+                  {practiceChars.length > 0 && (
+                    <Button variant="ghost" size="sm" onClick={() => setPracticeChars([])}>
+                      연습 지우고 다시
+                    </Button>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
 
           {flipped && (
             <div className="flex gap-2">
