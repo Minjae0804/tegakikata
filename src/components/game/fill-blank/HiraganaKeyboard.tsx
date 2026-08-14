@@ -56,35 +56,45 @@ export function HiraganaKeyboard({ onSelect }: HiraganaKeyboardProps) {
     setPendingModifier((prev) => (prev === type ? null : type));
   };
 
+  // 플릭 미리보기용 모음 배열 — activeColumn이 없을 때도 항상 5칸을 유지해서
+  // (아래 border-transparent)와 같은 원리로) 오른쪽 열의 자리를 고정해둔다.
+  const activeVowels = activeColumn !== null ? COLUMNS[activeColumn].vowels : ['', '', '', '', ''];
+
   return (
     <div className="flex flex-col gap-3">
-      {/* 휴대폰 자판 스타일 3열 그리드 */}
-      <div className="grid grid-cols-3 gap-1.5">
-        {COLUMNS.map((col, i) => (
-          <button
-            key={col.label}
-            type="button"
-            onClick={() => handleKeyClick(i)}
-            className={`font-jp flex h-11 w-11 items-center justify-center rounded-[var(--radius-field)]
-              border-2 text-lg transition-colors
-              ${activeColumn === i ? 'border-primary bg-primary/10 text-primary' : 'border-base-300 bg-base-100 hover:border-primary'}
-            `}
-          >
-            {col.label}
-          </button>
-        ))}
-      </div>
+      <div className="flex items-start gap-2">
+        {/* 휴대폰 자판 스타일 3열 그리드 */}
+        <div className="grid grid-cols-3 gap-1.5">
+          {COLUMNS.map((col, i) => (
+            <button
+              key={col.label}
+              type="button"
+              onClick={() => handleKeyClick(i)}
+              className={`font-jp flex h-11 w-11 items-center justify-center rounded-[var(--radius-field)]
+                border-2 text-lg transition-colors
+                ${activeColumn === i ? 'border-primary bg-primary/10 text-primary' : 'border-base-300 bg-base-100 hover:border-primary'}
+              `}
+            >
+              {col.label}
+            </button>
+          ))}
+        </div>
 
-      {/* 플릭 미리보기: 선택된 자음 키의 모음 5개가 펼쳐짐 */}
-      {activeColumn !== null && (
-        <div className="flex items-center gap-1.5 rounded-[var(--radius-box)] border border-base-300 bg-base-200/50 px-3 py-2">
-          {COLUMNS[activeColumn].vowels.map((char, vi) => (
+        {/* 플릭 미리보기: 선택된 자음 키의 모음 5개가 그리드 오른쪽에 세로로 펼쳐짐.
+            activeColumn이 없어도 5칸(자리)은 항상 렌더링해서, 키를 고를 때마다
+            레이아웃 전체가 밀렸다 당겨졌다 하는 흔들림을 막는다. */}
+        <div
+          className={`flex flex-col gap-1.5 rounded-[var(--radius-box)] border p-1.5 transition-colors
+            ${activeColumn !== null ? 'border-base-300 bg-base-200/50' : 'border-transparent'}
+          `}
+        >
+          {activeVowels.map((char, vi) => (
             <button
               key={vi}
               type="button"
               disabled={!char}
               onClick={() => commitSelect(char)}
-              className={`font-jp flex h-9 w-9 flex-col items-center justify-center rounded-[var(--radius-field)] text-base
+              className={`font-jp flex h-9 w-9 items-center justify-center rounded-[var(--radius-field)] text-base
                 ${char ? 'border-2 border-accent bg-accent/10 hover:bg-accent/20' : 'opacity-0'}
               `}
             >
@@ -92,7 +102,7 @@ export function HiraganaKeyboard({ onSelect }: HiraganaKeyboardProps) {
             </button>
           ))}
         </div>
-      )}
+      </div>
 
       {/* 탁음/반탁음 대기 버튼 — 누르면 켜지고, 그다음 고르는 글자 하나에 적용된 뒤 꺼진다 */}
       <div className="flex flex-col gap-1.5">

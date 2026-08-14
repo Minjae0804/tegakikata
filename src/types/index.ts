@@ -53,3 +53,10 @@ export interface TranslateGradeResult {
   isCorrect: boolean;
   feedback: string;
 }
+
+/** 단어장 맞추기 게임의 "한자 → 읽기/뜻" 방향 채점 결과. */
+export interface WordRecallGradeResult {
+  readingCorrect: boolean;
+  meaningCorrect: boolean;
+  feedback: string;
+}

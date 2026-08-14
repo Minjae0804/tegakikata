@@ -6,7 +6,7 @@
 // lib/claude/claudeClient.ts를 기본으로 쓰고 있음. 이 파일은 문제가 풀리면 바로 다시 쓸 수 있게 유지.
 
 import { GoogleGenAI, Type } from '@google/genai';
-import type { FillBlankQuestion, TranslateGradeResult, WordEntry } from '../../types';
+import type { FillBlankQuestion, TranslateGradeResult, WordEntry, WordRecallGradeResult } from '../../types';
 
 // 모델명은 Gemini 쪽에서 종종 바뀌므로, 실제로 안 되면 https://ai.google.dev/api/models 에서
 // 최신 모델명을 확인해 이 상수만 바꾸면 된다.
@@ -187,4 +187,43 @@ export async function gradeTranslation(
   };
 
   return (await generateJson(apiKey, prompt, schema)) as TranslateGradeResult;
+}
+
+/**
+ * 단어장 맞추기 "한자 → 읽기/뜻" 방향 채점. 정답 읽기/뜻은 이미 단어장 데이터로 알고 있지만,
+ * 오탈자나 동의어 표현까지 유연하게 받아주기 위해 문자열 비교 대신 AI로 채점한다.
+ */
+export async function gradeWordRecall(
+  apiKey: string,
+  word: WordEntry,
+  userReading: string,
+  userMeaning: string
+): Promise<WordRecallGradeResult> {
+  const prompt = `당신은 일본어 학습 앱의 채점자입니다.
+아래 한자 단어를 보고 사용자가 읽기(히라가나)와 뜻(한국어)을 답했습니다. 각각 채점해주세요.
+
+한자: ${word.kanji}
+정답 읽기: ${word.reading}
+정답 뜻: ${word.meaning}
+사용자가 입력한 읽기: ${userReading || '(입력 안 함)'}
+사용자가 입력한 뜻: ${userMeaning || '(입력 안 함)'}
+
+요구사항:
+- readingCorrect: 읽기가 정답과 실질적으로 같으면(사소한 표기 차이는 허용) true, 아니면 false
+- meaningCorrect: 뜻이 정답과 의미가 통하면(다른 표현/동의어여도 같은 뜻이면) true, 명백히 다르거나
+  안 썼으면 false
+- feedback: 한국어로 1~2문장. 읽기/뜻 중 틀린 게 있으면 무엇이 왜 틀렸는지 짚어주고, 둘 다
+  맞았으면 짧게 칭찬`;
+
+  const schema = {
+    type: Type.OBJECT,
+    properties: {
+      readingCorrect: { type: Type.BOOLEAN },
+      meaningCorrect: { type: Type.BOOLEAN },
+      feedback: { type: Type.STRING },
+    },
+    required: ['readingCorrect', 'meaningCorrect', 'feedback'],
+  };
+
+  return (await generateJson(apiKey, prompt, schema)) as WordRecallGradeResult;
 }
