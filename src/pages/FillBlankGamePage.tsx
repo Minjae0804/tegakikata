@@ -9,10 +9,7 @@
 // 순서로 탐색해서 원하는 파일만 골라 적용할 수 있다.
 // AI 예문 생성 시 grammar.md(useGrammarNotes)를 컨텍스트로 같이 넘긴다.
 import { useEffect, useMemo, useState } from 'react';
-import { HandwritingFrame } from '../components/handwriting/HandwritingFrame';
-import { CandidateChips } from '../components/game/fill-blank/CandidateChips';
-import { HiraganaKeyboard } from '../components/game/fill-blank/HiraganaKeyboard';
-import { KatakanaKeyboard } from '../components/game/fill-blank/KatakanaKeyboard';
+import { KanaInputPanel, type KanaInputMode } from '../components/game/fill-blank/KanaInputPanel';
 import { FeedbackBanner } from '../components/common/FeedbackBanner';
 import { ProgressStat } from '../components/common/ProgressStat';
 import { Button } from '../components/common/Button';
@@ -44,14 +41,12 @@ export function FillBlankGamePage({ progress, onExit }: FillBlankGamePageProps) 
 
   // 지금까지 확정한 글자들 (입력 칸에 쌓이는 값)
   const [enteredChars, setEnteredChars] = useState<string[]>([]);
-  const [candidates, setCandidates] = useState<string[]>([]);
-  const [canvasKey, setCanvasKey] = useState(0); // 글자 확정마다 올려서 캔버스를 강제로 리셋
 
   const [submitted, setSubmitted] = useState(false);
   const [correctCount, setCorrectCount] = useState(0);
   const [answeredCount, setAnsweredCount] = useState(0);
   const [wordIndex, setWordIndex] = useState(0);
-  const [inputMode, setInputMode] = useState<'kanji' | 'hiragana' | 'katakana'>('kanji');
+  const [inputMode, setInputMode] = useState<KanaInputMode>('kanji');
 
   // CSV에 적힌 순서 그대로 반복 출제되지 않도록, 단어장이 (다시) 로드될 때마다 한 번 섞어둔다.
   const shuffledWords = useMemo(() => shuffle(wordBank.words), [wordBank.words]);
@@ -82,19 +77,8 @@ export function FillBlankGamePage({ progress, onExit }: FillBlankGamePageProps) 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [config, wordIndex, wordBank.wordsLoading]);
 
-  const handleRecognize = (result: string[]) => {
-    setCandidates(result);
-  };
-
-  const handleSelectCandidate = (candidate: string) => {
-    if (submitted) return;
-    setEnteredChars((prev) => [...prev, candidate]);
-    setCandidates([]);
-    setCanvasKey((k) => k + 1); // 캔버스 리셋 -> 다음 글자 준비
-  };
-
-  /** 히라가나 버튼 클릭 — 필기 캔버스와 무관하게 바로 입력한 글자에 추가한다. */
-  const handleAddHiragana = (char: string) => {
+  /** 입력 패널(한자 후보/히라가나/가타카나 어느 쪽에서든)에서 글자 하나가 확정될 때마다 호출된다. */
+  const handleAddChar = (char: string) => {
     if (submitted) return;
     setEnteredChars((prev) => [...prev, char]);
   };
@@ -119,9 +103,7 @@ export function FillBlankGamePage({ progress, onExit }: FillBlankGamePageProps) 
   const handleNext = () => {
     setWordIndex((i) => i + 1);
     setEnteredChars([]);
-    setCandidates([]);
     setSubmitted(false);
-    setCanvasKey((k) => k + 1);
   };
 
   if (!hasRequiredApiKey(config)) {
@@ -243,62 +225,7 @@ export function FillBlankGamePage({ progress, onExit }: FillBlankGamePageProps) 
 
           {!submitted && (
             <div className="flex flex-col items-center gap-4">
-              <div className="flex gap-2">
-                <button
-                  type="button"
-                  onClick={() => setInputMode('kanji')}
-                  className={`btn btn-sm rounded-[var(--radius-field)] ${
-                    inputMode === 'kanji' ? 'btn-primary' : 'btn-outline'
-                  }`}
-                >
-                  한자 입력
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setInputMode('hiragana')}
-                  className={`btn btn-sm rounded-[var(--radius-field)] ${
-                    inputMode === 'hiragana' ? 'btn-primary' : 'btn-outline'
-                  }`}
-                >
-                  히라가나 입력
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setInputMode('katakana')}
-                  className={`btn btn-sm rounded-[var(--radius-field)] ${
-                    inputMode === 'katakana' ? 'btn-primary' : 'btn-outline'
-                  }`}
-                >
-                  가타카나 입력
-                </button>
-              </div>
-
-              {inputMode === 'kanji' && (
-                <div className="flex flex-col items-center gap-3">
-                  <HandwritingFrame key={canvasKey} onRecognize={handleRecognize} onClear={() => setCandidates([])} />
-
-                  {candidates.length > 0 && (
-                    <div className="flex flex-col items-center gap-2">
-                      <span className="font-body text-xs text-base-content/50">
-                        인식 후보 — 고르면 입력한 글자에 추가돼요
-                      </span>
-                      <CandidateChips candidates={candidates} onSelect={handleSelectCandidate} />
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {inputMode === 'hiragana' && (
-                <div className="flex flex-col items-center gap-3">
-                  <HiraganaKeyboard onSelect={handleAddHiragana} />
-                </div>
-              )}
-
-              {inputMode === 'katakana' && (
-                <div className="flex flex-col items-center gap-3">
-                  <KatakanaKeyboard onSelect={handleAddHiragana} />
-                </div>
-              )}
+              <KanaInputPanel mode={inputMode} onModeChange={setInputMode} onSelect={handleAddChar} />
 
               <Button variant="primary" onClick={handleSubmit} disabled={enteredChars.length === 0}>
                 제출

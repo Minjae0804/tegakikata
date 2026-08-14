@@ -7,8 +7,7 @@ import { useEffect, useState } from 'react';
 import { ProgressStat } from '../components/common/ProgressStat';
 import { Button } from '../components/common/Button';
 import { JlptBadge } from '../components/common/JlptBadge';
-import { HandwritingFrame } from '../components/handwriting/HandwritingFrame';
-import { CandidateChips } from '../components/game/fill-blank/CandidateChips';
+import { KanaInputPanel, type KanaInputMode } from '../components/game/fill-blank/KanaInputPanel';
 import { useWordBank } from '../hooks/useWordBank';
 import type { ProgressController } from '../hooks/useProgress';
 import { WordBankPicker } from '../components/wordbank/WordBankPicker';
@@ -39,15 +38,13 @@ export function WordBankStudyPage({ progress, onExit }: WordBankStudyPageProps) 
 
   // 손으로 써보기(선택) — 채점하지 않는 순수 연습용. 카드가 바뀔 때마다 초기화한다.
   const [writingOpen, setWritingOpen] = useState(false);
+  const [practiceInputMode, setPracticeInputMode] = useState<KanaInputMode>('kanji');
   const [practiceChars, setPracticeChars] = useState<string[]>([]);
-  const [practiceCandidates, setPracticeCandidates] = useState<string[]>([]);
-  const [practiceCanvasKey, setPracticeCanvasKey] = useState(0);
 
   const resetPractice = () => {
     setWritingOpen(false);
+    setPracticeInputMode('kanji');
     setPracticeChars([]);
-    setPracticeCandidates([]);
-    setPracticeCanvasKey((k) => k + 1);
   };
 
   // 이번 세션에서 풀 카드들. "다시"를 고르면 이 큐 안에서 몇 장 뒤로 다시 끼워넣는다(Anki처럼).
@@ -239,25 +236,17 @@ export function WordBankStudyPage({ progress, onExit }: WordBankStudyPageProps) 
                       ))
                     )}
                   </div>
-
-                  <HandwritingFrame key={practiceCanvasKey} onRecognize={setPracticeCandidates} onClear={() => setPracticeCandidates([])} />
-
-                  {practiceCandidates.length > 0 && (
-                    <CandidateChips
-                      candidates={practiceCandidates}
-                      onSelect={(c) => {
-                        setPracticeChars((prev) => [...prev, c]);
-                        setPracticeCandidates([]);
-                        setPracticeCanvasKey((k) => k + 1);
-                      }}
-                    />
-                  )}
-
                   {practiceChars.length > 0 && (
                     <Button variant="ghost" size="sm" onClick={() => setPracticeChars([])}>
                       연습 지우고 다시
                     </Button>
                   )}
+
+                  <KanaInputPanel
+                    mode={practiceInputMode}
+                    onModeChange={setPracticeInputMode}
+                    onSelect={(c) => setPracticeChars((prev) => [...prev, c])}
+                  />
                 </div>
               )}
             </div>
