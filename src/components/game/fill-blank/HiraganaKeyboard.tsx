@@ -137,7 +137,8 @@ export function HiraganaKeyboard({ onSelect }: HiraganaKeyboardProps) {
         )}
       </div>
 
-      {/* 요음/촉음 */}
+      {/* 요음/촉음 + 띄어쓰기. 공백은 정답 판정에서는 어차피 무시되지만(normalizeForMatch),
+          여러 단어로 된 구를 입력할 때 눈으로 구분하기 편하라고 버튼으로 넣어준다. */}
       <div className="flex gap-1.5">
         {YOUON_ROW.map((char) => (
           <button
@@ -150,6 +151,15 @@ export function HiraganaKeyboard({ onSelect }: HiraganaKeyboardProps) {
             {char}
           </button>
         ))}
+        <button
+          type="button"
+          onClick={() => commitSelect(' ')}
+          className="font-body flex h-8 items-center justify-center rounded-[var(--radius-field)]
+                     border-2 border-base-300 bg-base-100 px-3 text-xs text-base-content/60
+                     transition-colors hover:border-primary"
+        >
+          띄어쓰기
+        </button>
       </div>
     </div>
   );

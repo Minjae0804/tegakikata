@@ -17,6 +17,7 @@ import type { ProgressController } from '../hooks/useProgress';
 import { WordBankPicker } from '../components/wordbank/WordBankPicker';
 import { gradeWordRecall, hasRequiredApiKey } from '../lib/ai/aiClient';
 import { shuffle } from '../lib/wordbank/shuffle';
+import { normalizeForMatch } from '../lib/kana/answerMatch';
 import type { WordRecallGradeResult } from '../types';
 
 interface WordBankGamePageProps {
@@ -57,7 +58,10 @@ export function WordBankGamePage({ progress, onExit }: WordBankGamePageProps) {
 
   const enteredText = enteredChars.join('');
   const readingText = readingChars.join('');
-  const isKanjiCorrect = submitted && word !== null && enteredText === word.kanji;
+  // 가타카나/영문/숫자/문장부호처럼 필기·히라가나 버튼 어느 쪽으로도 입력할 수 없는 문자와 공백은
+  // 채점에서 제외한다 — 그런 문자가 정답에 섞여 있으면 영영 못 맞히게 되는 걸 막기 위함.
+  const isKanjiCorrect =
+    submitted && word !== null && normalizeForMatch(enteredText) === normalizeForMatch(word.kanji);
 
   const resetToKanjiInput = () => {
     setEnteredChars([]);
@@ -89,7 +93,7 @@ export function WordBankGamePage({ progress, onExit }: WordBankGamePageProps) {
   /** "뜻·읽기 → 한자" 채점 — AI 미사용, 단어장 데이터와 문자열 그대로 비교. */
   const handleSubmitKanji = () => {
     if (enteredChars.length === 0 || !word) return;
-    const correct = enteredText === word.kanji;
+    const correct = normalizeForMatch(enteredText) === normalizeForMatch(word.kanji);
     setSubmitted(true);
     setAnsweredCount((n) => n + 1);
     if (correct) setCorrectCount((n) => n + 1);

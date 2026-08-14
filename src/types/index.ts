@@ -23,7 +23,7 @@ export interface WordBank {
 export interface ProgressEntry {
   wordId: string;
   ease: number; // 이지팩터(ease factor). 기본 2.5, 최소 1.3 — 높을수록 간격이 빨리 늘어남
-  intervalDays: number; // 가장 최근에 계산된 복습 간격(일)
+  intervalMinutes: number; // 가장 최근에 계산된 복습 간격(분 단위 — 화면엔 초/분/시간/일로 적절히 표시)
   reps: number; // "다시" 이외의 평가를 받은 누적 횟수 (통계용)
   lapses: number; // "다시"를 받은 누적 횟수 (통계용 — 몇 번 까먹었는지)
   lastReviewedAt?: string; // 이 단어를 마지막으로 풀었던 시각 (ISO) — "언제 접속했는지"에 해당
@@ -34,7 +34,7 @@ export interface ProgressEntry {
  *  필드명도 축약해서 단어 수가 많아져도 페이로드/파싱 비용이 커지지 않게 한다. */
 export interface StoredProgressEntry {
   e: number; // ease
-  iv: number; // intervalDays
+  iv: number; // intervalMinutes
   r: number; // reps
   la: number; // lapses
   l?: string; // lastReviewedAt

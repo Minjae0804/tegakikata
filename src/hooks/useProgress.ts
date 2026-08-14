@@ -17,14 +17,14 @@ const CACHE_KEY = 'progress';
 const PROGRESS_PATH = 'saves/progress.json';
 
 function toStoredEntry(e: ProgressEntry): StoredProgressEntry {
-  return { e: e.ease, iv: e.intervalDays, r: e.reps, la: e.lapses, l: e.lastReviewedAt, n: e.nextReviewAt };
+  return { e: e.ease, iv: e.intervalMinutes, r: e.reps, la: e.lapses, l: e.lastReviewedAt, n: e.nextReviewAt };
 }
 
 function fromStoredEntry(wordId: string, s: StoredProgressEntry): ProgressEntry {
   return {
     wordId,
     ease: s.e,
-    intervalDays: s.iv,
+    intervalMinutes: s.iv,
     reps: s.r,
     lapses: s.la,
     lastReviewedAt: s.l,

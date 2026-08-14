@@ -22,6 +22,7 @@ import { WordBankPicker } from '../components/wordbank/WordBankPicker';
 import { useGrammarNotes } from '../hooks/useGrammarNotes';
 import { generateFillBlankQuestion, hasRequiredApiKey } from '../lib/ai/aiClient';
 import { shuffle } from '../lib/wordbank/shuffle';
+import { normalizeForMatch } from '../lib/kana/answerMatch';
 import type { FillBlankQuestion } from '../types';
 
 interface FillBlankGamePageProps {
@@ -55,7 +56,10 @@ export function FillBlankGamePage({ progress, onExit }: FillBlankGamePageProps) 
   const shuffledWords = useMemo(() => shuffle(wordBank.words), [wordBank.words]);
 
   const enteredText = enteredChars.join('');
-  const isCorrect = submitted && question !== null && enteredText === question.targetWord.kanji;
+  // 가타카나/영문/숫자/문장부호처럼 필기·히라가나 버튼 어느 쪽으로도 입력할 수 없는 문자와 공백은
+  // 채점에서 제외한다 — 그런 문자가 정답에 섞여 있으면 영영 못 맞히게 되는 걸 막기 위함.
+  const isCorrect =
+    submitted && question !== null && normalizeForMatch(enteredText) === normalizeForMatch(question.targetWord.kanji);
 
   const loadQuestion = async () => {
     if (!config || !hasRequiredApiKey(config) || wordBank.wordsLoading) return;
@@ -101,7 +105,7 @@ export function FillBlankGamePage({ progress, onExit }: FillBlankGamePageProps) 
 
   const handleSubmit = () => {
     if (enteredChars.length === 0 || !question) return;
-    const correct = enteredText === question.targetWord.kanji;
+    const correct = normalizeForMatch(enteredText) === normalizeForMatch(question.targetWord.kanji);
     setSubmitted(true);
     setAnsweredCount((n) => n + 1);
     if (correct) setCorrectCount((n) => n + 1);

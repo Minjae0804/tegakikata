@@ -10,7 +10,7 @@ import { JlptBadge } from '../components/common/JlptBadge';
 import { useWordBank } from '../hooks/useWordBank';
 import type { ProgressController } from '../hooks/useProgress';
 import { WordBankPicker } from '../components/wordbank/WordBankPicker';
-import { pickDueWords, previewIntervalDays, type Rating } from '../lib/srs/schedule';
+import { pickDueWords, previewInterval, formatInterval, type Rating } from '../lib/srs/schedule';
 import { shuffle } from '../lib/wordbank/shuffle';
 import type { WordEntry } from '../types';
 
@@ -209,9 +209,7 @@ export function WordBankStudyPage({ progress, onExit }: WordBankStudyPageProps) 
                 >
                   <span className="font-body text-sm">{label}</span>
                   <span className="font-body text-[10px] opacity-70">
-                    {previewIntervalDays(currentEntry, rating) === 0
-                      ? '오늘'
-                      : `${previewIntervalDays(currentEntry, rating)}일`}
+                    {formatInterval(previewInterval(currentEntry, rating))}
                   </span>
                 </button>
               ))}
