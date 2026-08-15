@@ -4,7 +4,12 @@
 //    글자 그대로 비교해서 채점한다.
 //  - "한자 → 읽기·뜻": 한자만 보고 읽기(히라가나)와 뜻(한국어)을 답한다. 오탈자/동의어처럼
 //    유연하게 봐줘야 하는 채점이라 AI(Gemini/Claude)로 채점한다.
-import { useEffect, useMemo, useState } from 'react';
+//
+// 출제 순서는 단어장 학습(안키)과 동일하게 우선순위(SRS) 기반이다 — pickDueWords()로 급한
+// 단어부터 정렬한 큐를 만들어 순서대로 보여준다. 맞히면 그 단어는 큐에서 빠지고(다음 복습
+// 시각이 늘어나 우선도가 자연히 낮아짐), 틀리거나 "모르겠어요"를 누르면 몇 문제 뒤에 다시
+// 나오도록 큐 중간에 끼워넣는다(안키 학습 페이지의 "다시" 재큐잉과 동일한 방식).
+import { useEffect, useState } from 'react';
 import { KanaInputPanel, type KanaInputMode } from '../components/game/fill-blank/KanaInputPanel';
 import { FeedbackBanner } from '../components/common/FeedbackBanner';
 import { ProgressStat } from '../components/common/ProgressStat';
@@ -15,9 +20,10 @@ import type { ProgressController } from '../hooks/useProgress';
 import { WordBankPicker } from '../components/wordbank/WordBankPicker';
 import { gradeWordRecall, hasRequiredApiKey } from '../lib/ai/aiClient';
 import { shuffle } from '../lib/wordbank/shuffle';
+import { pickDueWords } from '../lib/srs/schedule';
 import { normalizeForMatch } from '../lib/kana/answerMatch';
 import { hasKanji } from '../lib/wordbank/hasKanji';
-import type { WordRecallGradeResult } from '../types';
+import type { WordEntry, WordRecallGradeResult } from '../types';
 
 interface WordBankGamePageProps {
   progress: ProgressController;
@@ -32,11 +38,20 @@ export function WordBankGamePage({ progress, onExit }: WordBankGamePageProps) {
 
   const [pickerOpen, setPickerOpen] = useState(false);
   const [direction, setDirection] = useState<Direction>('toKanji');
-  const [round, setRound] = useState(0);
 
-  // CSV에 적힌 순서 그대로 반복 출제되지 않도록, 단어장이 (다시) 로드될 때마다 한 번 섞어둔다.
-  const shuffledWords = useMemo(() => shuffle(wordBank.words), [wordBank.words]);
-  const word = shuffledWords.length > 0 ? shuffledWords[round % shuffledWords.length] : null;
+  // 우선순위(SRS) 순으로 정렬된 출제 큐. 단어장/진도 로딩이 끝나면 (다시) 짠다 — progress.entries
+  // 자체는 의존성에 안 넣는다(안키 학습 페이지와 동일한 이유: 채점마다 큐가 재구성되는 걸 막기 위해).
+  const [queue, setQueue] = useState<WordEntry[]>([]);
+  // 방금 답한 결과 — "다음 문제"를 누를 때 큐를 어떻게 진행시킬지(빼기 vs 뒤로 재큐잉) 결정한다.
+  const [lastOutcome, setLastOutcome] = useState<'correct' | 'missed' | null>(null);
+
+  useEffect(() => {
+    if (wordBank.wordsLoading || progress.loading) return;
+    setQueue(pickDueWords(shuffle(wordBank.words), progress.entries, true));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [wordBank.words, wordBank.wordsLoading, progress.loading]);
+
+  const word = queue[0] ?? null;
 
   const [correctCount, setCorrectCount] = useState(0);
   const [answeredCount, setAnsweredCount] = useState(0);
@@ -90,12 +105,29 @@ export function WordBankGamePage({ progress, onExit }: WordBankGamePageProps) {
   const handleDirectionChange = (next: Direction) => {
     if (next === direction) return;
     setDirection(next);
+    setLastOutcome(null);
     resetToKanjiInput();
     resetToReadingInput();
   };
 
+  /** 다음 문제로 넘어간다 — 방금 결과(lastOutcome)에 따라 큐를 진행시킨다(안키와 동일한 재큐잉 방식). */
   const handleNext = () => {
-    setRound((r) => r + 1);
+    setQueue((prev) => {
+      const current = prev[0];
+      const rest = prev.slice(1);
+      if (lastOutcome === 'missed' && current) {
+        // 틀렸거나 "모르겠어요"였던 단어는 몇 문제 뒤에 다시 나오도록 큐 중간에 끼워넣는다.
+        const insertAt = Math.min(rest.length, 3);
+        return [...rest.slice(0, insertAt), current, ...rest.slice(insertAt)];
+      }
+      if (rest.length === 0) {
+        // 큐를 다 돌았으면(전부 맞혔으면) 최신 진도로 다시 짜서 계속 이어간다 — 이 게임은
+        // 안키 학습과 달리 "세션 종료" 없이 계속 도는 게임이라서.
+        return pickDueWords(shuffle(wordBank.words), progress.entries, true);
+      }
+      return rest;
+    });
+    setLastOutcome(null);
     resetToKanjiInput();
     resetToReadingInput();
   };
@@ -106,6 +138,7 @@ export function WordBankGamePage({ progress, onExit }: WordBankGamePageProps) {
     const correct = normalizeForMatch(enteredText) === normalizeForMatch(kanjiTarget);
     setSubmitted(true);
     setAnsweredCount((n) => n + 1);
+    setLastOutcome(correct ? 'correct' : 'missed');
     // 단어장-단어별 학습 진도(SRS)에 이번 결과를 반영한다 — 정답은 "보통", 틀렸을 땐 "모르겠어요"와
     // 동일하게 최우선으로 다시 나오게 한다.
     if (correct) {
@@ -122,6 +155,7 @@ export function WordBankGamePage({ progress, onExit }: WordBankGamePageProps) {
     setSubmitted(true);
     setDontKnow(true);
     setAnsweredCount((n) => n + 1);
+    setLastOutcome('missed');
     progress.recordMiss(word.id);
   };
 
@@ -141,6 +175,7 @@ export function WordBankGamePage({ progress, onExit }: WordBankGamePageProps) {
       setRecallResult(graded);
       setAnsweredCount((n) => n + 1);
       const correct = wordHasKanji ? graded.readingCorrect && graded.meaningCorrect : graded.meaningCorrect;
+      setLastOutcome(correct ? 'correct' : 'missed');
       if (correct) {
         setCorrectCount((n) => n + 1);
         progress.recordReview(word.id, 'good');
@@ -159,6 +194,7 @@ export function WordBankGamePage({ progress, onExit }: WordBankGamePageProps) {
   const handleDontKnowReading = () => {
     if (!word) return;
     setAnsweredCount((n) => n + 1);
+    setLastOutcome('missed');
     progress.recordMiss(word.id);
     setRecallResult({
       readingCorrect: false,
@@ -167,7 +203,7 @@ export function WordBankGamePage({ progress, onExit }: WordBankGamePageProps) {
     });
   };
 
-  const wordBankEmpty = !wordBank.wordsLoading && shuffledWords.length === 0;
+  const wordBankEmpty = !wordBank.wordsLoading && wordBank.words.length === 0;
   const blockedByMissingApiKey = direction === 'toReading' && !hasRequiredApiKey(config);
 
   return (
@@ -233,8 +269,8 @@ export function WordBankGamePage({ progress, onExit }: WordBankGamePageProps) {
         />
       )}
 
-      {wordBank.wordsLoading && (
-        <p className="font-body text-sm text-base-content/50">단어장을 불러오는 중...</p>
+      {(wordBank.wordsLoading || progress.loading) && (
+        <p className="font-body text-sm text-base-content/50">불러오는 중...</p>
       )}
 
       {wordBankEmpty && (
@@ -255,7 +291,7 @@ export function WordBankGamePage({ progress, onExit }: WordBankGamePageProps) {
         </p>
       )}
 
-      {word && !wordBank.wordsLoading && (
+      {word && !wordBank.wordsLoading && !progress.loading && (
         <>
           {direction === 'toKanji' ? (
             <>
