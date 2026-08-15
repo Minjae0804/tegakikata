@@ -11,7 +11,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import type { ProgressEntry, ProgressStore, StoredProgressEntry } from '../types';
 import { readAppFile, writeAppFile } from '../lib/drive/driveClient';
 import { getCached, setCached } from '../lib/storage/localCache';
-import { nextEntryAfterReview, nextEntryAfterSkip, type Rating } from '../lib/srs/schedule';
+import { nextEntryAfterReview, nextEntryAfterMiss, type Rating } from '../lib/srs/schedule';
 
 const CACHE_KEY = 'progress';
 const PROGRESS_PATH = 'saves/progress.json';
@@ -110,13 +110,14 @@ export function useProgress(enabled = true) {
   }, []);
 
   /**
-   * 빈칸 채우기/단어장 맞추기에서 "넘기기"를 눌렀을 때 로컬에 즉시 반영한다 — 오답과 비슷하게
-   * 취급하되, 다음 복습 시각을 아예 지워서 안키 학습에서 최우선으로 다시 잡히게 한다.
+   * 빈칸 채우기/단어장 맞추기에서 "모르겠어요"를 누르거나 답을 틀렸을 때 로컬에 즉시 반영한다 —
+   * 다음 복습 시각을 아예 지워서 안키 학습에서 최우선(한 번도 안 푼 단어보다도 급하게)으로
+   * 다시 잡히게 한다.
    */
-  const recordSkip = useCallback((wordId: string): ProgressEntry => {
+  const recordMiss = useCallback((wordId: string): ProgressEntry => {
     let nextEntry!: ProgressEntry;
     setEntries((prev) => {
-      nextEntry = nextEntryAfterSkip(wordId, prev.get(wordId));
+      nextEntry = nextEntryAfterMiss(wordId, prev.get(wordId));
       const next = new Map(prev);
       next.set(wordId, nextEntry);
       setCached(CACHE_KEY, toStore(next));
@@ -137,7 +138,7 @@ export function useProgress(enabled = true) {
     };
   }, []);
 
-  return { entries, loading, saving, error, refresh, recordReview, recordSkip, flush };
+  return { entries, loading, saving, error, refresh, recordReview, recordMiss, flush };
 }
 
 /** 게임 페이지들이 props로 받아 쓰는 useProgress()의 반환 타입. */

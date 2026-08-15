@@ -44,8 +44,8 @@ export function FillBlankGamePage({ progress, onExit }: FillBlankGamePageProps) 
   const [enteredChars, setEnteredChars] = useState<string[]>([]);
 
   const [submitted, setSubmitted] = useState(false);
-  // 정답을 시도하지 않고 넘긴 경우 — submitted와 별개로, 오답 취급하되 메시지를 다르게 보여준다.
-  const [skipped, setSkipped] = useState(false);
+  // "모르겠어요"로 정답 시도 없이 넘긴 경우 — submitted와 별개로, 오답 취급하되 메시지를 다르게 보여준다.
+  const [dontKnow, setDontKnow] = useState(false);
   const [correctCount, setCorrectCount] = useState(0);
   const [answeredCount, setAnsweredCount] = useState(0);
   const [wordIndex, setWordIndex] = useState(0);
@@ -61,7 +61,7 @@ export function FillBlankGamePage({ progress, onExit }: FillBlankGamePageProps) 
   // 가타카나/영문/숫자/문장부호처럼 필기·히라가나 버튼 어느 쪽으로도 입력할 수 없는 문자와 공백은
   // 채점에서 제외한다 — 그런 문자가 정답에 섞여 있으면 영영 못 맞히게 되는 걸 막기 위함.
   const isCorrect =
-    submitted && !skipped && question !== null && normalizeForMatch(enteredText) === normalizeForMatch(targetAnswer);
+    submitted && !dontKnow && question !== null && normalizeForMatch(enteredText) === normalizeForMatch(targetAnswer);
 
   const loadQuestion = async () => {
     if (!config || !hasRequiredApiKey(config) || wordBank.wordsLoading) return;
@@ -105,21 +105,25 @@ export function FillBlankGamePage({ progress, onExit }: FillBlankGamePageProps) 
     const correct = normalizeForMatch(enteredText) === normalizeForMatch(targetAnswer);
     setSubmitted(true);
     setAnsweredCount((n) => n + 1);
-    if (correct) setCorrectCount((n) => n + 1);
     // AI가 즉석에서 지어낸 단어(단어장에 없는 단어)는 단어장-단어별 진도에 남기지 않는다.
-    if (wordBank.words.some((w) => w.id === question.targetWord.id)) {
-      progress.recordReview(question.targetWord.id, correct ? 'good' : 'again');
+    const tracked = wordBank.words.some((w) => w.id === question.targetWord.id);
+    if (correct) {
+      setCorrectCount((n) => n + 1);
+      if (tracked) progress.recordReview(question.targetWord.id, 'good');
+    } else if (tracked) {
+      // 틀렸을 때도 "모르겠어요"와 똑같이 최우선으로 다시 나오게 한다.
+      progress.recordMiss(question.targetWord.id);
     }
   };
 
-  /** 정답을 시도하지 않고 넘긴다 — 오답으로 취급하고, 단어장 학습(안키)에서 최우선으로 다시 나오게 한다. */
-  const handleSkip = () => {
+  /** 정답을 시도하지 않고 "모르겠어요"로 넘긴다 — 오답과 동일하게 단어장 학습(안키)에서 최우선으로 다시 나오게 한다. */
+  const handleDontKnow = () => {
     if (!question) return;
     setSubmitted(true);
-    setSkipped(true);
+    setDontKnow(true);
     setAnsweredCount((n) => n + 1);
     if (wordBank.words.some((w) => w.id === question.targetWord.id)) {
-      progress.recordSkip(question.targetWord.id);
+      progress.recordMiss(question.targetWord.id);
     }
   };
 
@@ -127,7 +131,7 @@ export function FillBlankGamePage({ progress, onExit }: FillBlankGamePageProps) 
     setWordIndex((i) => i + 1);
     setEnteredChars([]);
     setSubmitted(false);
-    setSkipped(false);
+    setDontKnow(false);
   };
 
   if (!hasRequiredApiKey(config)) {
@@ -260,8 +264,8 @@ export function FillBlankGamePage({ progress, onExit }: FillBlankGamePageProps) 
                 <Button variant="primary" onClick={handleSubmit} disabled={enteredChars.length === 0}>
                   제출
                 </Button>
-                <Button variant="ghost" onClick={handleSkip}>
-                  넘기기
+                <Button variant="ghost" onClick={handleDontKnow}>
+                  모르겠어요
                 </Button>
               </div>
             </div>
@@ -274,9 +278,9 @@ export function FillBlankGamePage({ progress, onExit }: FillBlankGamePageProps) 
                 message={
                   isCorrect
                     ? `정답이에요. 「${targetHasKanji ? `${question.targetWord.kanji}(${question.targetWord.reading})` : question.targetWord.reading}」 — ${question.targetWord.meaning}`
-                    : skipped
-                      ? `넘어갔어요. 정답은 「${targetHasKanji ? `${question.targetWord.kanji}(${question.targetWord.reading})` : question.targetWord.reading}」예요. 이 단어는 단어장 학습에서 최우선으로 다시 나와요.`
-                      : `아쉬워요, 정답은 「${targetHasKanji ? `${question.targetWord.kanji}(${question.targetWord.reading})` : question.targetWord.reading}」예요. (입력한 답: 「${enteredText}」)`
+                    : dontKnow
+                      ? `정답은 「${targetHasKanji ? `${question.targetWord.kanji}(${question.targetWord.reading})` : question.targetWord.reading}」예요. 이 단어는 단어장 학습에서 최우선으로 다시 나와요.`
+                      : `아쉬워요, 정답은 「${targetHasKanji ? `${question.targetWord.kanji}(${question.targetWord.reading})` : question.targetWord.reading}」예요. (입력한 답: 「${enteredText}」) 이 단어는 단어장 학습에서 최우선으로 다시 나와요.`
                 }
               />
               {question.translation && (

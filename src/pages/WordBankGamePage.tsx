@@ -45,8 +45,8 @@ export function WordBankGamePage({ progress, onExit }: WordBankGamePageProps) {
   const [enteredChars, setEnteredChars] = useState<string[]>([]);
   const [inputMode, setInputMode] = useState<KanaInputMode>('kanji');
   const [submitted, setSubmitted] = useState(false);
-  // 정답을 시도하지 않고 넘긴 경우 — submitted와 별개로, 오답 취급하되 메시지를 다르게 보여준다.
-  const [skipped, setSkipped] = useState(false);
+  // "모르겠어요"로 정답 시도 없이 넘긴 경우 — submitted와 별개로, 오답 취급하되 메시지를 다르게 보여준다.
+  const [dontKnow, setDontKnow] = useState(false);
 
   // "한자 → 읽기·뜻" 상태
   const [readingChars, setReadingChars] = useState<string[]>([]);
@@ -65,7 +65,7 @@ export function WordBankGamePage({ progress, onExit }: WordBankGamePageProps) {
   // 가타카나/영문/숫자/문장부호처럼 필기·히라가나 버튼 어느 쪽으로도 입력할 수 없는 문자와 공백은
   // 채점에서 제외한다 — 그런 문자가 정답에 섞여 있으면 영영 못 맞히게 되는 걸 막기 위함.
   const isKanjiCorrect =
-    submitted && !skipped && word !== null && normalizeForMatch(enteredText) === normalizeForMatch(kanjiTarget);
+    submitted && !dontKnow && word !== null && normalizeForMatch(enteredText) === normalizeForMatch(kanjiTarget);
 
   // 새 단어가 오면 "뜻·읽기 → 한자" 입력 모드를 그 단어에 맞게 맞춰준다 — 한자가 없는 단어면
   // 한자 필기는 애초에 쓸 데가 없으니 히라가나 입력으로 기본값을 바꾼다.
@@ -76,7 +76,7 @@ export function WordBankGamePage({ progress, onExit }: WordBankGamePageProps) {
   const resetToKanjiInput = () => {
     setEnteredChars([]);
     setSubmitted(false);
-    setSkipped(false);
+    setDontKnow(false);
   };
 
   const resetToReadingInput = () => {
@@ -106,18 +106,23 @@ export function WordBankGamePage({ progress, onExit }: WordBankGamePageProps) {
     const correct = normalizeForMatch(enteredText) === normalizeForMatch(kanjiTarget);
     setSubmitted(true);
     setAnsweredCount((n) => n + 1);
-    if (correct) setCorrectCount((n) => n + 1);
-    // 단어장-단어별 학습 진도(SRS)에 이번 결과를 반영한다 — 정답은 "보통", 오답은 "다시"로 취급.
-    progress.recordReview(word.id, correct ? 'good' : 'again');
+    // 단어장-단어별 학습 진도(SRS)에 이번 결과를 반영한다 — 정답은 "보통", 틀렸을 땐 "모르겠어요"와
+    // 동일하게 최우선으로 다시 나오게 한다.
+    if (correct) {
+      setCorrectCount((n) => n + 1);
+      progress.recordReview(word.id, 'good');
+    } else {
+      progress.recordMiss(word.id);
+    }
   };
 
-  /** 정답을 시도하지 않고 넘긴다 — 오답으로 취급하고, 단어장 학습(안키)에서 최우선으로 다시 나오게 한다. */
-  const handleSkipKanji = () => {
+  /** 정답을 시도하지 않고 "모르겠어요"로 넘긴다 — 오답과 동일하게 단어장 학습(안키)에서 최우선으로 다시 나오게 한다. */
+  const handleDontKnowKanji = () => {
     if (!word) return;
     setSubmitted(true);
-    setSkipped(true);
+    setDontKnow(true);
     setAnsweredCount((n) => n + 1);
-    progress.recordSkip(word.id);
+    progress.recordMiss(word.id);
   };
 
   /** "한자 → 읽기·뜻" 채점 — AI 사용. 한자가 없는 단어는 이미 읽기를 보여준 상태라 뜻만 채점한다. */
@@ -136,8 +141,13 @@ export function WordBankGamePage({ progress, onExit }: WordBankGamePageProps) {
       setRecallResult(graded);
       setAnsweredCount((n) => n + 1);
       const correct = wordHasKanji ? graded.readingCorrect && graded.meaningCorrect : graded.meaningCorrect;
-      if (correct) setCorrectCount((n) => n + 1);
-      progress.recordReview(word.id, correct ? 'good' : 'again');
+      if (correct) {
+        setCorrectCount((n) => n + 1);
+        progress.recordReview(word.id, 'good');
+      } else {
+        // 틀렸을 때도 "모르겠어요"와 동일하게 최우선으로 다시 나오게 한다.
+        progress.recordMiss(word.id);
+      }
     } catch (e) {
       setGradeError(e instanceof Error ? e.message : '채점에 실패했습니다.');
     } finally {
@@ -145,15 +155,15 @@ export function WordBankGamePage({ progress, onExit }: WordBankGamePageProps) {
     }
   };
 
-  /** 정답을 시도하지 않고 넘긴다 — AI 채점 없이 바로 오답 처리하고, 안키 학습에서 최우선으로 다시 나오게 한다. */
-  const handleSkipReading = () => {
+  /** 정답을 시도하지 않고 "모르겠어요"로 넘긴다 — AI 채점 없이 바로 오답 처리하고, 안키 학습에서 최우선으로 다시 나오게 한다. */
+  const handleDontKnowReading = () => {
     if (!word) return;
     setAnsweredCount((n) => n + 1);
-    progress.recordSkip(word.id);
+    progress.recordMiss(word.id);
     setRecallResult({
       readingCorrect: false,
       meaningCorrect: false,
-      feedback: '넘어갔어요. 이 단어는 단어장 학습에서 최우선으로 다시 나와요.',
+      feedback: '모르겠다고 표시했어요. 정답을 확인해보세요.',
     });
   };
 
@@ -299,8 +309,8 @@ export function WordBankGamePage({ progress, onExit }: WordBankGamePageProps) {
                     <Button variant="primary" onClick={handleSubmitKanji} disabled={enteredChars.length === 0}>
                       제출
                     </Button>
-                    <Button variant="ghost" onClick={handleSkipKanji}>
-                      넘기기
+                    <Button variant="ghost" onClick={handleDontKnowKanji}>
+                      모르겠어요
                     </Button>
                   </div>
                 </div>
@@ -313,9 +323,9 @@ export function WordBankGamePage({ progress, onExit }: WordBankGamePageProps) {
                     message={
                       isKanjiCorrect
                         ? `정답이에요. 「${wordHasKanji ? `${word.kanji}(${word.reading})` : word.reading}」 — ${word.meaning}`
-                        : skipped
-                          ? `넘어갔어요. 정답은 「${wordHasKanji ? `${word.kanji}(${word.reading})` : word.reading}」예요. 이 단어는 단어장 학습에서 최우선으로 다시 나와요.`
-                          : `아쉬워요, 정답은 「${wordHasKanji ? `${word.kanji}(${word.reading})` : word.reading}」예요. (입력한 답: 「${enteredText}」)`
+                        : dontKnow
+                          ? `정답은 「${wordHasKanji ? `${word.kanji}(${word.reading})` : word.reading}」예요. 이 단어는 단어장 학습에서 최우선으로 다시 나와요.`
+                          : `아쉬워요, 정답은 「${wordHasKanji ? `${word.kanji}(${word.reading})` : word.reading}」예요. (입력한 답: 「${enteredText}」) 이 단어는 단어장 학습에서 최우선으로 다시 나와요.`
                     }
                   />
                   <Button variant="primary" onClick={handleNext}>
@@ -388,31 +398,29 @@ export function WordBankGamePage({ progress, onExit }: WordBankGamePageProps) {
                     >
                       {grading ? '채점하는 중...' : '채점하기'}
                     </Button>
-                    <Button variant="ghost" onClick={handleSkipReading} disabled={grading}>
-                      넘기기
+                    <Button variant="ghost" onClick={handleDontKnowReading} disabled={grading}>
+                      모르겠어요
                     </Button>
                   </div>
                 </div>
               )}
 
-              {recallResult && (
-                <div className="flex flex-col gap-3">
-                  <FeedbackBanner
-                    status={
-                      (wordHasKanji ? recallResult.readingCorrect : true) && recallResult.meaningCorrect
-                        ? 'correct'
-                        : 'incorrect'
-                    }
-                    message={recallResult.feedback}
-                  />
-                  <p className="font-body text-xs text-base-content/50">
-                    {wordHasKanji ? `정답 — 읽기: 「${word.reading}」 · 뜻: ${word.meaning}` : `정답 — 뜻: ${word.meaning}`}
-                  </p>
-                  <Button variant="primary" onClick={handleNext}>
-                    다음 문제
-                  </Button>
-                </div>
-              )}
+              {recallResult &&
+                (() => {
+                  const recallCorrect = (wordHasKanji ? recallResult.readingCorrect : true) && recallResult.meaningCorrect;
+                  return (
+                    <div className="flex flex-col gap-3">
+                      <FeedbackBanner status={recallCorrect ? 'correct' : 'incorrect'} message={recallResult.feedback} />
+                      <p className="font-body text-xs text-base-content/50">
+                        {wordHasKanji ? `정답 — 읽기: 「${word.reading}」 · 뜻: ${word.meaning}` : `정답 — 뜻: ${word.meaning}`}
+                        {!recallCorrect && ' · 이 단어는 단어장 학습에서 최우선으로 다시 나와요.'}
+                      </p>
+                      <Button variant="primary" onClick={handleNext}>
+                        다음 문제
+                      </Button>
+                    </div>
+                  );
+                })()}
             </>
           )}
         </>

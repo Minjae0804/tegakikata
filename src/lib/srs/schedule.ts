@@ -82,12 +82,12 @@ export function previewInterval(prev: ProgressEntry | undefined, rating: Rating)
 }
 
 /**
- * 빈칸 채우기/단어장 맞추기에서 "넘기기"(정답을 시도하지 않고 건너뜀)를 눌렀을 때 쓴다.
+ * 빈칸 채우기/단어장 맞추기에서 "모르겠어요"를 누르거나 답을 틀렸을 때 쓴다.
  * 오답(again)과 비슷하게 랩스를 늘리고 이지팩터를 깎지만, 다음 복습 시각(nextReviewAt)은
- * 아예 지워버린다 — dueScore()가 nextReviewAt 없는 단어를 -Infinity(가장 급함)로 취급하므로,
- * 이미 벌어져 있던 다른 단어의 복습 시각과 상관없이 안키 학습에서 최우선으로 다시 나오게 된다.
+ * 아예 지워버린다 — dueScore()가 이걸 "한 번도 안 푼 단어"보다도 더 급한 최우선 등급으로
+ * 취급하므로, 이미 벌어져 있던 다른 단어의 복습 시각과 상관없이 안키 학습에서 맨 앞으로 나온다.
  */
-export function nextEntryAfterSkip(
+export function nextEntryAfterMiss(
   wordId: string,
   prev: ProgressEntry | undefined,
   now: Date = new Date()
@@ -111,10 +111,22 @@ export function formatInterval(minutes: number): string {
   return `${Math.round(minutes / DAY_MINUTES)}일`;
 }
 
-/** 정렬용 점수 — 작을수록 급함. 한 번도 안 푼 단어가 가장 급하게 취급된다. */
+// dueScore의 "한 번도 안 푼 단어"/"모르겠어요·오답으로 표시된 단어" 등급을 나타내는 점수.
+// 실제 nextReviewAt 타임스탬프(항상 1970년 이후의 큰 양수 ms값)보다 항상 작은, 서로 다른 유한값을
+// 써야 한다 — 예전엔 둘 다 -Infinity를 썼는데, 그러면 정렬 비교(a - b)가 -Infinity - (-Infinity) =
+// NaN이 돼서 "최우선으로 맨 앞에 나온다"가 실제로는 보장되지 않고 셔플된 순서에 그냥 묻혀버렸다.
+const MISSED_SCORE = -2; // "모르겠어요"/오답 — 한 번도 안 푼 단어보다도 더 급하게 취급
+const NEVER_STUDIED_SCORE = -1;
+
+/**
+ * 정렬용 점수 — 작을수록 급함.
+ * "모르겠어요"/오답으로 막 표시된 단어가 가장 급하고, 그다음이 한 번도 안 푼 단어, 그다음은
+ * nextReviewAt이 이른(많이 밀린) 순서.
+ */
 function dueScore(word: WordEntry, progress: Map<string, ProgressEntry>): number {
   const entry = progress.get(word.id);
-  if (!entry?.nextReviewAt) return -Infinity;
+  if (!entry) return NEVER_STUDIED_SCORE;
+  if (!entry.nextReviewAt) return MISSED_SCORE;
   return new Date(entry.nextReviewAt).getTime();
 }
 
