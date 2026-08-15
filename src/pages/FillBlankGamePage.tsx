@@ -44,6 +44,8 @@ export function FillBlankGamePage({ progress, onExit }: FillBlankGamePageProps) 
   const [enteredChars, setEnteredChars] = useState<string[]>([]);
 
   const [submitted, setSubmitted] = useState(false);
+  // 정답을 시도하지 않고 넘긴 경우 — submitted와 별개로, 오답 취급하되 메시지를 다르게 보여준다.
+  const [skipped, setSkipped] = useState(false);
   const [correctCount, setCorrectCount] = useState(0);
   const [answeredCount, setAnsweredCount] = useState(0);
   const [wordIndex, setWordIndex] = useState(0);
@@ -58,7 +60,8 @@ export function FillBlankGamePage({ progress, onExit }: FillBlankGamePageProps) 
   const targetAnswer = question ? (targetHasKanji ? question.targetWord.kanji : question.targetWord.reading) : '';
   // 가타카나/영문/숫자/문장부호처럼 필기·히라가나 버튼 어느 쪽으로도 입력할 수 없는 문자와 공백은
   // 채점에서 제외한다 — 그런 문자가 정답에 섞여 있으면 영영 못 맞히게 되는 걸 막기 위함.
-  const isCorrect = submitted && question !== null && normalizeForMatch(enteredText) === normalizeForMatch(targetAnswer);
+  const isCorrect =
+    submitted && !skipped && question !== null && normalizeForMatch(enteredText) === normalizeForMatch(targetAnswer);
 
   const loadQuestion = async () => {
     if (!config || !hasRequiredApiKey(config) || wordBank.wordsLoading) return;
@@ -109,10 +112,22 @@ export function FillBlankGamePage({ progress, onExit }: FillBlankGamePageProps) 
     }
   };
 
+  /** 정답을 시도하지 않고 넘긴다 — 오답으로 취급하고, 단어장 학습(안키)에서 최우선으로 다시 나오게 한다. */
+  const handleSkip = () => {
+    if (!question) return;
+    setSubmitted(true);
+    setSkipped(true);
+    setAnsweredCount((n) => n + 1);
+    if (wordBank.words.some((w) => w.id === question.targetWord.id)) {
+      progress.recordSkip(question.targetWord.id);
+    }
+  };
+
   const handleNext = () => {
     setWordIndex((i) => i + 1);
     setEnteredChars([]);
     setSubmitted(false);
+    setSkipped(false);
   };
 
   if (!hasRequiredApiKey(config)) {
@@ -241,9 +256,14 @@ export function FillBlankGamePage({ progress, onExit }: FillBlankGamePageProps) 
                 modes={targetHasKanji ? undefined : ['hiragana', 'katakana']}
               />
 
-              <Button variant="primary" onClick={handleSubmit} disabled={enteredChars.length === 0}>
-                제출
-              </Button>
+              <div className="flex gap-2">
+                <Button variant="primary" onClick={handleSubmit} disabled={enteredChars.length === 0}>
+                  제출
+                </Button>
+                <Button variant="ghost" onClick={handleSkip}>
+                  넘기기
+                </Button>
+              </div>
             </div>
           )}
 
@@ -254,7 +274,9 @@ export function FillBlankGamePage({ progress, onExit }: FillBlankGamePageProps) 
                 message={
                   isCorrect
                     ? `정답이에요. 「${targetHasKanji ? `${question.targetWord.kanji}(${question.targetWord.reading})` : question.targetWord.reading}」 — ${question.targetWord.meaning}`
-                    : `아쉬워요, 정답은 「${targetHasKanji ? `${question.targetWord.kanji}(${question.targetWord.reading})` : question.targetWord.reading}」예요. (입력한 답: 「${enteredText}」)`
+                    : skipped
+                      ? `넘어갔어요. 정답은 「${targetHasKanji ? `${question.targetWord.kanji}(${question.targetWord.reading})` : question.targetWord.reading}」예요. 이 단어는 단어장 학습에서 최우선으로 다시 나와요.`
+                      : `아쉬워요, 정답은 「${targetHasKanji ? `${question.targetWord.kanji}(${question.targetWord.reading})` : question.targetWord.reading}」예요. (입력한 답: 「${enteredText}」)`
                 }
               />
               {question.translation && (

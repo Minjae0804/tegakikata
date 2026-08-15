@@ -81,6 +81,28 @@ export function previewInterval(prev: ProgressEntry | undefined, rating: Rating)
   return computeNext(prev, rating).intervalMinutes;
 }
 
+/**
+ * 빈칸 채우기/단어장 맞추기에서 "넘기기"(정답을 시도하지 않고 건너뜀)를 눌렀을 때 쓴다.
+ * 오답(again)과 비슷하게 랩스를 늘리고 이지팩터를 깎지만, 다음 복습 시각(nextReviewAt)은
+ * 아예 지워버린다 — dueScore()가 nextReviewAt 없는 단어를 -Infinity(가장 급함)로 취급하므로,
+ * 이미 벌어져 있던 다른 단어의 복습 시각과 상관없이 안키 학습에서 최우선으로 다시 나오게 된다.
+ */
+export function nextEntryAfterSkip(
+  wordId: string,
+  prev: ProgressEntry | undefined,
+  now: Date = new Date()
+): ProgressEntry {
+  return {
+    wordId,
+    ease: Math.max(MIN_EASE, (prev?.ease ?? DEFAULT_EASE) - 0.2),
+    intervalMinutes: 0,
+    reps: prev?.reps ?? 0,
+    lapses: (prev?.lapses ?? 0) + 1,
+    lastReviewedAt: now.toISOString(),
+    nextReviewAt: undefined,
+  };
+}
+
 /** 분 단위 간격을 초/분/시간/일 중 가장 읽기 편한 단위로 바꿔서 보여준다. */
 export function formatInterval(minutes: number): string {
   if (minutes < 1) return `${Math.max(1, Math.round(minutes * 60))}초`;

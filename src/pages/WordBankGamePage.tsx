@@ -45,6 +45,8 @@ export function WordBankGamePage({ progress, onExit }: WordBankGamePageProps) {
   const [enteredChars, setEnteredChars] = useState<string[]>([]);
   const [inputMode, setInputMode] = useState<KanaInputMode>('kanji');
   const [submitted, setSubmitted] = useState(false);
+  // 정답을 시도하지 않고 넘긴 경우 — submitted와 별개로, 오답 취급하되 메시지를 다르게 보여준다.
+  const [skipped, setSkipped] = useState(false);
 
   // "한자 → 읽기·뜻" 상태
   const [readingChars, setReadingChars] = useState<string[]>([]);
@@ -63,7 +65,7 @@ export function WordBankGamePage({ progress, onExit }: WordBankGamePageProps) {
   // 가타카나/영문/숫자/문장부호처럼 필기·히라가나 버튼 어느 쪽으로도 입력할 수 없는 문자와 공백은
   // 채점에서 제외한다 — 그런 문자가 정답에 섞여 있으면 영영 못 맞히게 되는 걸 막기 위함.
   const isKanjiCorrect =
-    submitted && word !== null && normalizeForMatch(enteredText) === normalizeForMatch(kanjiTarget);
+    submitted && !skipped && word !== null && normalizeForMatch(enteredText) === normalizeForMatch(kanjiTarget);
 
   // 새 단어가 오면 "뜻·읽기 → 한자" 입력 모드를 그 단어에 맞게 맞춰준다 — 한자가 없는 단어면
   // 한자 필기는 애초에 쓸 데가 없으니 히라가나 입력으로 기본값을 바꾼다.
@@ -74,6 +76,7 @@ export function WordBankGamePage({ progress, onExit }: WordBankGamePageProps) {
   const resetToKanjiInput = () => {
     setEnteredChars([]);
     setSubmitted(false);
+    setSkipped(false);
   };
 
   const resetToReadingInput = () => {
@@ -108,6 +111,15 @@ export function WordBankGamePage({ progress, onExit }: WordBankGamePageProps) {
     progress.recordReview(word.id, correct ? 'good' : 'again');
   };
 
+  /** 정답을 시도하지 않고 넘긴다 — 오답으로 취급하고, 단어장 학습(안키)에서 최우선으로 다시 나오게 한다. */
+  const handleSkipKanji = () => {
+    if (!word) return;
+    setSubmitted(true);
+    setSkipped(true);
+    setAnsweredCount((n) => n + 1);
+    progress.recordSkip(word.id);
+  };
+
   /** "한자 → 읽기·뜻" 채점 — AI 사용. 한자가 없는 단어는 이미 읽기를 보여준 상태라 뜻만 채점한다. */
   const handleGradeReading = async () => {
     if (!word || !config || !hasRequiredApiKey(config)) return;
@@ -131,6 +143,18 @@ export function WordBankGamePage({ progress, onExit }: WordBankGamePageProps) {
     } finally {
       setGrading(false);
     }
+  };
+
+  /** 정답을 시도하지 않고 넘긴다 — AI 채점 없이 바로 오답 처리하고, 안키 학습에서 최우선으로 다시 나오게 한다. */
+  const handleSkipReading = () => {
+    if (!word) return;
+    setAnsweredCount((n) => n + 1);
+    progress.recordSkip(word.id);
+    setRecallResult({
+      readingCorrect: false,
+      meaningCorrect: false,
+      feedback: '넘어갔어요. 이 단어는 단어장 학습에서 최우선으로 다시 나와요.',
+    });
   };
 
   const wordBankEmpty = !wordBank.wordsLoading && shuffledWords.length === 0;
@@ -271,9 +295,14 @@ export function WordBankGamePage({ progress, onExit }: WordBankGamePageProps) {
                     modes={wordHasKanji ? undefined : ['hiragana', 'katakana']}
                   />
 
-                  <Button variant="primary" onClick={handleSubmitKanji} disabled={enteredChars.length === 0}>
-                    제출
-                  </Button>
+                  <div className="flex gap-2">
+                    <Button variant="primary" onClick={handleSubmitKanji} disabled={enteredChars.length === 0}>
+                      제출
+                    </Button>
+                    <Button variant="ghost" onClick={handleSkipKanji}>
+                      넘기기
+                    </Button>
+                  </div>
                 </div>
               )}
 
@@ -284,7 +313,9 @@ export function WordBankGamePage({ progress, onExit }: WordBankGamePageProps) {
                     message={
                       isKanjiCorrect
                         ? `정답이에요. 「${wordHasKanji ? `${word.kanji}(${word.reading})` : word.reading}」 — ${word.meaning}`
-                        : `아쉬워요, 정답은 「${wordHasKanji ? `${word.kanji}(${word.reading})` : word.reading}」예요. (입력한 답: 「${enteredText}」)`
+                        : skipped
+                          ? `넘어갔어요. 정답은 「${wordHasKanji ? `${word.kanji}(${word.reading})` : word.reading}」예요. 이 단어는 단어장 학습에서 최우선으로 다시 나와요.`
+                          : `아쉬워요, 정답은 「${wordHasKanji ? `${word.kanji}(${word.reading})` : word.reading}」예요. (입력한 답: 「${enteredText}」)`
                     }
                   />
                   <Button variant="primary" onClick={handleNext}>
@@ -346,15 +377,21 @@ export function WordBankGamePage({ progress, onExit }: WordBankGamePageProps) {
 
                   {gradeError && <p className="font-body text-xs text-secondary">{gradeError}</p>}
 
-                  <Button
-                    variant="primary"
-                    onClick={() => void handleGradeReading()}
-                    disabled={
-                      grading || (wordHasKanji ? readingText.trim() === '' && meaningAnswer.trim() === '' : meaningAnswer.trim() === '')
-                    }
-                  >
-                    {grading ? '채점하는 중...' : '채점하기'}
-                  </Button>
+                  <div className="flex gap-2">
+                    <Button
+                      variant="primary"
+                      onClick={() => void handleGradeReading()}
+                      disabled={
+                        grading ||
+                        (wordHasKanji ? readingText.trim() === '' && meaningAnswer.trim() === '' : meaningAnswer.trim() === '')
+                      }
+                    >
+                      {grading ? '채점하는 중...' : '채점하기'}
+                    </Button>
+                    <Button variant="ghost" onClick={handleSkipReading} disabled={grading}>
+                      넘기기
+                    </Button>
+                  </div>
                 </div>
               )}
 
