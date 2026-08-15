@@ -279,8 +279,8 @@ export function FillBlankGamePage({ progress, onExit }: FillBlankGamePageProps) 
                   isCorrect
                     ? `정답이에요. 「${targetHasKanji ? `${question.targetWord.kanji}(${question.targetWord.reading})` : question.targetWord.reading}」 — ${question.targetWord.meaning}`
                     : dontKnow
-                      ? `정답은 「${targetHasKanji ? `${question.targetWord.kanji}(${question.targetWord.reading})` : question.targetWord.reading}」예요. 이 단어는 단어장 학습에서 최우선으로 다시 나와요.`
-                      : `아쉬워요, 정답은 「${targetHasKanji ? `${question.targetWord.kanji}(${question.targetWord.reading})` : question.targetWord.reading}」예요. (입력한 답: 「${enteredText}」) 이 단어는 단어장 학습에서 최우선으로 다시 나와요.`
+                      ? `정답은 「${targetHasKanji ? `${question.targetWord.kanji}(${question.targetWord.reading})` : question.targetWord.reading}」예요 — ${question.targetWord.meaning}. 이 단어는 단어장 학습에서 최우선으로 다시 나와요.`
+                      : `아쉬워요, 정답은 「${targetHasKanji ? `${question.targetWord.kanji}(${question.targetWord.reading})` : question.targetWord.reading}」예요 — ${question.targetWord.meaning}. (입력한 답: 「${enteredText}」) 이 단어는 단어장 학습에서 최우선으로 다시 나와요.`
                 }
               />
               {question.translation && (

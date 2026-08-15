@@ -360,8 +360,8 @@ export function WordBankGamePage({ progress, onExit }: WordBankGamePageProps) {
                       isKanjiCorrect
                         ? `정답이에요. 「${wordHasKanji ? `${word.kanji}(${word.reading})` : word.reading}」 — ${word.meaning}`
                         : dontKnow
-                          ? `정답은 「${wordHasKanji ? `${word.kanji}(${word.reading})` : word.reading}」예요. 이 단어는 단어장 학습에서 최우선으로 다시 나와요.`
-                          : `아쉬워요, 정답은 「${wordHasKanji ? `${word.kanji}(${word.reading})` : word.reading}」예요. (입력한 답: 「${enteredText}」) 이 단어는 단어장 학습에서 최우선으로 다시 나와요.`
+                          ? `정답은 「${wordHasKanji ? `${word.kanji}(${word.reading})` : word.reading}」예요 — ${word.meaning}. 이 단어는 단어장 학습에서 최우선으로 다시 나와요.`
+                          : `아쉬워요, 정답은 「${wordHasKanji ? `${word.kanji}(${word.reading})` : word.reading}」예요 — ${word.meaning}. (입력한 답: 「${enteredText}」) 이 단어는 단어장 학습에서 최우선으로 다시 나와요.`
                     }
                   />
                   <Button variant="primary" onClick={handleNext}>
