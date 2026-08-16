@@ -7,7 +7,7 @@ import {
   listWordBankCsvFiles,
   readWordBankFileById,
 } from '../lib/drive/driveClient';
-import { parseWordBankCsv } from '../lib/wordbank/csv';
+import { parseWordBankCsv, sanitizeBankName } from '../lib/wordbank/csv';
 import { getCached, setCached } from '../lib/storage/localCache';
 
 const SELECTED_FILES_CACHE_KEY = 'wordBankSelectedFiles';
@@ -62,7 +62,7 @@ export function useWordBank(enabled = true) {
       const parsedPerFile = await Promise.all(
         files.map(async (file) => {
           const csvText = await readWordBankFileById(file.id);
-          return parseWordBankCsv(csvText);
+          return parseWordBankCsv(csvText, sanitizeBankName(file.name));
         })
       );
       const merged = new Map<string, WordEntry>();
@@ -107,3 +107,8 @@ export function useWordBank(enabled = true) {
     loadWords,
   };
 }
+
+/** 게임 페이지들이 props로 받아 쓰는 useWordBank()의 반환 타입 — App 레벨에서 하나만 만들어
+ *  공유한다(useProgress처럼). 페이지마다 따로 만들면 한 화면에서 단어장을 바꿔도 다른 화면이
+ *  자기 캐시를 그대로 들고 있어서 어긋날 수 있어서다. */
+export type WordBankController = ReturnType<typeof useWordBank>;

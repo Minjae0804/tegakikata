@@ -13,7 +13,7 @@ import { Button } from '../common/Button';
 import type { WordBankFileRef } from '../../hooks/useWordBank';
 import { openCsvFilePicker } from '../../lib/drive/picker';
 import { writeAppFile } from '../../lib/drive/driveClient';
-import { parseWordBankCsv } from '../../lib/wordbank/csv';
+import { parseWordBankCsv, sanitizeBankName } from '../../lib/wordbank/csv';
 
 interface WordBankPickerProps {
   rootFolderId: string | null;
@@ -119,7 +119,8 @@ export function WordBankPicker({
     setUploadSuccess(null);
     try {
       const text = await file.text();
-      const entries = parseWordBankCsv(text); // 필수 컬럼이 없으면 여기서 에러를 던짐
+      // 여긴 형식(필수 컬럼/유효 행)만 미리 확인하는 용도라 bankName은 실제 저장 이름을 그대로 써도 무방.
+      const entries = parseWordBankCsv(text, sanitizeBankName(file.name)); // 필수 컬럼이 없으면 여기서 에러를 던짐
       if (entries.length === 0) {
         throw new Error('유효한 단어가 하나도 없어요. kanji/reading/meaning 값이 채워진 행이 있는지 확인해주세요.');
       }

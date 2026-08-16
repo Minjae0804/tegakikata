@@ -67,8 +67,8 @@ export function ComponentShowcasePage() {
         </Section>
 
         <Section title="Word Card">
-          <WordCard word={{ id: '1', kanji: '食', reading: 'たべる', meaning: '먹다', jlptLevel: 'N5' }} />
-          <WordCard word={{ id: '2', kanji: '経済', reading: 'けいざい', meaning: '경제', jlptLevel: 'N2' }} />
+          <WordCard word={{ id: '1', bankName: 'showcase', kanji: '食', reading: 'たべる', meaning: '먹다', jlptLevel: 'N5' }} />
+          <WordCard word={{ id: '2', bankName: 'showcase', kanji: '経済', reading: 'けいざい', meaning: '경제', jlptLevel: 'N2' }} />
         </Section>
 
         <Section title="Handwriting Frame (Signature)">

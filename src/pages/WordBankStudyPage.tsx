@@ -11,7 +11,7 @@ import { ProgressStat } from '../components/common/ProgressStat';
 import { Button } from '../components/common/Button';
 import { JlptBadge } from '../components/common/JlptBadge';
 import { KanaInputPanel, type KanaInputMode } from '../components/game/fill-blank/KanaInputPanel';
-import { useWordBank } from '../hooks/useWordBank';
+import type { WordBankController } from '../hooks/useWordBank';
 import type { ProgressController } from '../hooks/useProgress';
 import { WordBankPicker } from '../components/wordbank/WordBankPicker';
 import { pickDueWords, combinedDueScore } from '../lib/srs/schedule';
@@ -21,11 +21,11 @@ import type { WordEntry } from '../types';
 
 interface WordBankStudyPageProps {
   progress: ProgressController;
+  wordBank: WordBankController;
   onExit?: () => void;
 }
 
-export function WordBankStudyPage({ progress, onExit }: WordBankStudyPageProps) {
-  const wordBank = useWordBank(true);
+export function WordBankStudyPage({ progress, wordBank, onExit }: WordBankStudyPageProps) {
 
   const [pickerOpen, setPickerOpen] = useState(false);
   const [studyAll, setStudyAll] = useState(false);

@@ -149,7 +149,10 @@ export async function generateFillBlankQuestion(
   return {
     sentence: result.sentence,
     targetWord: {
-      id: `ai_${result.kanji}_${result.reading}`,
+      // 단어장 없이 AI가 즉석에서 만든 단어라 소속 단어장이 없다 — "ai"라는 가상 단어장 하나로
+      // 묶어서 진도를 저장한다(그래야 매번 다른 단어마다 저장 파일이 따로 안 생긴다).
+      id: `ai::${result.kanji}_${result.reading}`,
+      bankName: 'ai',
       kanji: result.kanji,
       reading: result.reading,
       meaning: result.meaning,

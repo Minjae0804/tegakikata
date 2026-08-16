@@ -21,7 +21,7 @@ import { ProgressStat } from '../components/common/ProgressStat';
 import { Button } from '../components/common/Button';
 import { WordCard } from '../components/common/WordCard';
 import { useAppConfig } from '../hooks/useAppConfig';
-import { useWordBank } from '../hooks/useWordBank';
+import type { WordBankController } from '../hooks/useWordBank';
 import type { ProgressController } from '../hooks/useProgress';
 import { WordBankPicker } from '../components/wordbank/WordBankPicker';
 import { gradeWordRecall, hasRequiredApiKey } from '../lib/ai/aiClient';
@@ -33,14 +33,14 @@ import type { WordEntry, WordRecallGradeResult } from '../types';
 
 interface WordBankGamePageProps {
   progress: ProgressController;
+  wordBank: WordBankController;
   onExit?: () => void;
 }
 
 type Direction = 'toKanji' | 'toReading';
 
-export function WordBankGamePage({ progress, onExit }: WordBankGamePageProps) {
+export function WordBankGamePage({ progress, wordBank, onExit }: WordBankGamePageProps) {
   const { config } = useAppConfig(true);
-  const wordBank = useWordBank(true);
 
   const [pickerOpen, setPickerOpen] = useState(false);
   const [direction, setDirection] = useState<Direction>('toKanji');

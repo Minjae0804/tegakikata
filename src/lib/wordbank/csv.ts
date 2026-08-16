@@ -11,7 +11,9 @@
 // kanji가 비어있으면(한자 없는 단어) 각 게임이 알아서 "한자 쓰기" 대신 "읽기 쓰기"로,
 // "한자 보고 뜻/읽기 맞히기" 대신 "읽기 보고 뜻 맞히기"로 문제 형태를 바꿔서 낸다.
 //
-// id는 컬럼에 없고 kanji+reading 조합으로 파싱 시점에 자동 생성한다.
+// id는 컬럼에 없고 "이 CSV가 속한 단어장 이름 + kanji+reading" 조합으로 파싱 시점에 자동
+// 생성한다 — 단어장(saves/progress-<단어장 이름>.json)별로 학습 진도를 따로 저장하기 때문에,
+// 서로 다른 단어장에 같은 단어(같은 kanji+reading)가 있어도 진도는 섞이지 않는다.
 
 import type { WordEntry } from '../../types';
 
@@ -73,12 +75,23 @@ function escapeCsvField(value: string): string {
   return value;
 }
 
-function makeWordId(kanji: string, reading: string): string {
-  return `${kanji}_${reading}`;
+/**
+ * 드라이브 CSV 파일 이름을 진도 저장 파일 경로 등에 쓸 수 있는 "단어장 이름"으로 다듬는다.
+ * ".csv" 확장자를 떼고, id 파싱에 쓰는 구분자("::")나 경로 구분자("/")는 섞이면 안 되니 치환한다.
+ */
+export function sanitizeBankName(fileName: string): string {
+  const base = fileName.replace(/\.csv$/i, '').trim();
+  const cleaned = base.replace(/::/g, '_').replace(/\//g, '_');
+  return cleaned || '단어장';
 }
 
-/** CSV 문자열을 WordEntry 배열로 파싱한다. 필수 컬럼이 없으면 에러를 던진다. */
-export function parseWordBankCsv(csvText: string): WordEntry[] {
+function makeWordId(bankName: string, kanji: string, reading: string): string {
+  return `${bankName}::${kanji}_${reading}`;
+}
+
+/** CSV 문자열을 WordEntry 배열로 파싱한다. 필수 컬럼이 없으면 에러를 던진다.
+ *  bankName은 이 CSV가 속한 단어장 이름 — 진도를 단어장별로 나눠 저장하기 위해 id에 포함시킨다. */
+export function parseWordBankCsv(csvText: string, bankName: string): WordEntry[] {
   const withoutBom = csvText.replace(/^\uFEFF/, ''); // 엑셀/구글시트 내보내기 시 흔히 붙는 BOM 제거
   const rows = parseCsvRows(withoutBom.trim());
   if (rows.length === 0) return [];
@@ -109,7 +122,7 @@ export function parseWordBankCsv(csvText: string): WordEntry[] {
     const jlptLevel = rawLevel && VALID_JLPT_LEVELS.has(rawLevel) ? (rawLevel as WordEntry['jlptLevel']) : undefined;
     const notes = notesIdx >= 0 ? row[notesIdx]?.trim() || undefined : undefined;
 
-    entries.push({ id: makeWordId(kanji, reading), kanji, reading, meaning, jlptLevel, notes });
+    entries.push({ id: makeWordId(bankName, kanji, reading), bankName, kanji, reading, meaning, jlptLevel, notes });
   }
 
   return entries;

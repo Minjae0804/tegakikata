@@ -9,7 +9,7 @@ import { ProgressStat } from '../components/common/ProgressStat';
 import { KanaInputPanel, type KanaInputMode } from '../components/game/fill-blank/KanaInputPanel';
 import { useAppConfig } from '../hooks/useAppConfig';
 import { useGrammarNotes } from '../hooks/useGrammarNotes';
-import { useWordBank } from '../hooks/useWordBank';
+import type { WordBankController } from '../hooks/useWordBank';
 import type { ProgressController } from '../hooks/useProgress';
 import { WordBankPicker } from '../components/wordbank/WordBankPicker';
 import { generateTranslateQuestion, gradeTranslation, hasRequiredApiKey } from '../lib/ai/aiClient';
@@ -19,6 +19,7 @@ import type { TranslateGradeResult, WordEntry } from '../types';
 
 interface TranslateGamePageProps {
   progress: ProgressController;
+  wordBank: WordBankController;
   onExit?: () => void;
 }
 
@@ -30,10 +31,9 @@ function randomWordCount(available: number): number {
   return min + Math.floor(Math.random() * (max - min + 1));
 }
 
-export function TranslateGamePage({ progress, onExit }: TranslateGamePageProps) {
+export function TranslateGamePage({ progress, wordBank, onExit }: TranslateGamePageProps) {
   const { config } = useAppConfig(true);
   const { notes: grammarNotes } = useGrammarNotes(true);
-  const wordBank = useWordBank(true);
 
   const [pickerOpen, setPickerOpen] = useState(false);
   const [wordIndex, setWordIndex] = useState(0);

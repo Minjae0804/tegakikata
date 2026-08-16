@@ -1,7 +1,13 @@
 // 도메인 전역 타입 정의
 
 export interface WordEntry {
+  /** 단어장(CSV 파일) 안에서만이 아니라 전체에서 유일한 값 — bankName을 포함해서 만든다
+   *  (lib/wordbank/csv.ts의 makeWordId 참고). 학습 진도도 이 id를 키로 쓰므로, 같은 단어라도
+   *  단어장이 다르면 서로 다른 진도로 취급된다. */
   id: string;
+  /** 이 단어가 어느 단어장(CSV 파일)에서 왔는지 — 진도 저장 파일을 단어장별로 나누는 데 쓴다
+   *  (hooks/useProgress.ts 참고). */
+  bankName: string;
   kanji: string;
   reading: string;
   meaning: string;
@@ -30,8 +36,9 @@ export interface ProgressEntry {
   nextReviewAt?: string; // 이 시각 이후로 복습 대상이 됨. 없으면(한 번도 안 풀었으면) 항상 대상
 }
 
-/** saves/progress.json에 저장되는 압축 형태. wordId는 키로만 쓰고 값엔 안 넣고(중복 제거),
- *  필드명도 축약해서 단어 수가 많아져도 페이로드/파싱 비용이 커지지 않게 한다. */
+/** saves/progress-<단어장 이름>.json에 저장되는 압축 형태(단어장별로 파일이 따로 있음 —
+ *  hooks/useProgress.ts 참고). wordId는 키로만 쓰고 값엔 안 넣고(중복 제거), 필드명도 축약해서
+ *  단어 수가 많아져도 페이로드/파싱 비용이 커지지 않게 한다. */
 export interface StoredProgressEntry {
   e: number; // ease
   iv: number; // intervalMinutes

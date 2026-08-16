@@ -15,7 +15,7 @@ import { ProgressStat } from '../components/common/ProgressStat';
 import { Button } from '../components/common/Button';
 import { WordCard } from '../components/common/WordCard';
 import { useAppConfig } from '../hooks/useAppConfig';
-import { useWordBank } from '../hooks/useWordBank';
+import type { WordBankController } from '../hooks/useWordBank';
 import type { ProgressController } from '../hooks/useProgress';
 import { WordBankPicker } from '../components/wordbank/WordBankPicker';
 import { useGrammarNotes } from '../hooks/useGrammarNotes';
@@ -28,12 +28,12 @@ import type { FillBlankQuestion } from '../types';
 
 interface FillBlankGamePageProps {
   progress: ProgressController;
+  wordBank: WordBankController;
   onExit?: () => void;
 }
 
-export function FillBlankGamePage({ progress, onExit }: FillBlankGamePageProps) {
+export function FillBlankGamePage({ progress, wordBank, onExit }: FillBlankGamePageProps) {
   const { config } = useAppConfig(true);
-  const wordBank = useWordBank(true);
   const { notes: grammarNotes } = useGrammarNotes(true);
 
   const [pickerOpen, setPickerOpen] = useState(false);
