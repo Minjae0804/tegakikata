@@ -8,6 +8,7 @@ import { WordBankStudyPage } from './pages/WordBankStudyPage';
 import { SettingsPage } from './pages/SettingsPage';
 import { useProgress } from './hooks/useProgress';
 import { isDriveAuthenticated, signOutDrive } from './lib/drive/driveClient';
+import { LanguageProvider } from './lib/i18n/LanguageContext';
 
 type View = 'home' | 'fill-blank' | 'translate' | 'wordbank' | 'wordbank-study' | 'settings';
 
@@ -63,11 +64,13 @@ function App() {
   };
 
   return (
-    <div className="flex min-h-screen items-center justify-center px-6 py-10">
-      <div className="w-full max-w-md rounded-[var(--radius-box)] border border-base-300 bg-white shadow-sm">
-        {renderContent()}
+    <LanguageProvider>
+      <div className="flex min-h-screen items-center justify-center px-6 py-10">
+        <div className="w-full max-w-md rounded-[var(--radius-box)] border border-base-300 bg-white shadow-sm">
+          {renderContent()}
+        </div>
       </div>
-    </div>
+    </LanguageProvider>
   );
 }
 
