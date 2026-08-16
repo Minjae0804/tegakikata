@@ -46,6 +46,10 @@ export function WordBankGamePage({ progress, onExit }: WordBankGamePageProps) {
   // 지금 방향이 채점하는 스킬 — 진도 키(skillKey)와 출제 큐 정렬 기준 둘 다 이걸 쓴다.
   const currentSkill = direction === 'toKanji' ? 'kanji' : 'reading';
 
+  // "한자 → 읽기·뜻"의 AI 채점은 이제 토글이다 — AI 키가 없으면 강제로 꺼진 채로 고정된다.
+  const aiAvailable = hasRequiredApiKey(config);
+  const [useAiGrading, setUseAiGrading] = useState(true);
+
   // 우선순위(SRS) 순으로 정렬된 출제 큐. 단어장/진도 로딩이 끝나거나 방향(=스킬)이 바뀌면
   // (다시) 짠다 — progress.entries 자체는 의존성에 안 넣는다(안키 학습 페이지와 동일한 이유:
   // 채점마다 큐가 재구성되는 걸 막기 위해).
@@ -94,6 +98,14 @@ export function WordBankGamePage({ progress, onExit }: WordBankGamePageProps) {
   // 방향 전환 자체를 막는다 — 방향별로 "이미 답했는지"를 따로 봐야 한다(toKanji=submitted,
   // toReading=recallResult 있음).
   const answeredInCurrentDirection = direction === 'toKanji' ? submitted : recallResult !== null;
+  // 로컬(비AI) 채점은 "읽기만" 정확히 일치하는지 볼 수 있는 게 전부라, 이미 프롬프트로
+  // 읽기를 보여주는 한자 없는 단어에서는 의미가 없다 — 그런 단어는 AI를 못 쓰면 이 방향에서
+  // 뜻을 채점할 방법이 아예 없다는 뜻이다.
+  const canGradeReadingLocally = wordHasKanji;
+  // AI 키가 없으면(aiAvailable=false) 토글과 상관없이 항상 꺼진다. AI가 있는데 사용자가 토글을
+  // 꺼도, 한자 없는 단어는 로컬 채점이 불가능하니 그럴 땐 AI를 계속 쓴다(막힌 화면 대신).
+  const effectiveUseAi = aiAvailable && (useAiGrading || !canGradeReadingLocally);
+  const readingDirectionBlocked = direction === 'toReading' && !effectiveUseAi && !canGradeReadingLocally;
 
   // 새 단어가 오면 "뜻·읽기 → 한자" 입력 모드를 그 단어에 맞게 맞춰준다 — 한자가 없는 단어면
   // 한자 필기는 애초에 쓸 데가 없으니 히라가나 입력으로 기본값을 바꾼다.
@@ -203,6 +215,29 @@ export function WordBankGamePage({ progress, onExit }: WordBankGamePageProps) {
     }
   };
 
+  /**
+   * "한자 → 읽기·뜻" 채점 — AI 미사용, 읽기만 정확히 일치하는지 비교한다. 뜻은 AI 없이는
+   * 표현이 달라도 맞는지 유연하게 볼 방법이 없어서 아예 묻지 않고 정답 카드로만 공개한다
+   * (자기신고에 의존해 "맞다"고 스스로 채점하게 두지 않기 위해).
+   */
+  const handleGradeReadingLocal = () => {
+    if (!word || readingText.trim() === '') return;
+    const correct = normalizeForMatch(readingText) === normalizeForMatch(word.reading);
+    setAnsweredCount((n) => n + 1);
+    setLastOutcome(correct ? 'correct' : 'missed');
+    if (correct) {
+      setCorrectCount((n) => n + 1);
+      progress.recordReview(skillKey(word.id, 'reading'), 'good');
+    } else {
+      progress.recordMiss(skillKey(word.id, 'reading'));
+    }
+    setRecallResult({
+      readingCorrect: correct,
+      meaningCorrect: true, // AI 없이는 뜻을 채점하지 않는다 — 오답 취급하지 않으려고 true로 둔다.
+      feedback: correct ? '정답이에요!' : `아쉬워요, 정답 읽기는 「${word.reading}」예요.`,
+    });
+  };
+
   /** 정답을 시도하지 않고 "모르겠어요"로 넘긴다 — AI 채점 없이 바로 오답 처리하고, 안키 학습에서 최우선으로 다시 나오게 한다. */
   const handleDontKnowReading = () => {
     if (!word) return;
@@ -217,7 +252,6 @@ export function WordBankGamePage({ progress, onExit }: WordBankGamePageProps) {
   };
 
   const wordBankEmpty = !wordBank.wordsLoading && wordBank.words.length === 0;
-  const blockedByMissingApiKey = direction === 'toReading' && !hasRequiredApiKey(config);
 
   return (
     <div className="flex flex-col gap-8 p-8">
@@ -265,13 +299,28 @@ export function WordBankGamePage({ progress, onExit }: WordBankGamePageProps) {
               direction === 'toReading' ? 'btn-primary' : 'btn-outline'
             }`}
           >
-            한자 → 읽기·뜻 (AI 채점)
+            한자 → 읽기·뜻
           </button>
         </div>
         <Button variant="ghost" size="sm" onClick={() => setPickerOpen((v) => !v)}>
           {pickerOpen ? '단어장 선택 닫기' : '단어장 선택'}
         </Button>
       </div>
+
+      {direction === 'toReading' && (
+        <label className="flex items-center gap-2">
+          <input
+            type="checkbox"
+            className="toggle toggle-sm toggle-primary"
+            checked={effectiveUseAi}
+            onChange={(e) => setUseAiGrading(e.target.checked)}
+            disabled={!aiAvailable}
+          />
+          <span className="font-body text-xs text-base-content/60">
+            AI 채점 사용{!aiAvailable && ' — AI 설정이 없어서 꺼져 있어요 (읽기만 정확히 맞혀서 채점)'}
+          </span>
+        </label>
+      )}
 
       {wordBank.wordsError && (
         <p className="font-body text-xs text-secondary">단어장 로드 실패: {wordBank.wordsError}</p>
@@ -309,11 +358,16 @@ export function WordBankGamePage({ progress, onExit }: WordBankGamePageProps) {
         </div>
       )}
 
-      {blockedByMissingApiKey && (
-        <p className="font-body text-sm text-base-content/60">
-          AI API 키가 설정되지 않았어요. 온보딩에서 키를 등록하거나, 위에서 "뜻·읽기 → 한자" 방향으로
-          바꿔서 AI 없이 풀어보세요.
-        </p>
+      {readingDirectionBlocked && (
+        <div className="flex flex-col gap-2">
+          <p className="font-body text-sm text-base-content/60">
+            이 단어는 한자가 없어서, AI 없이는 이 방향에서 뜻을 채점할 방법이 없어요. 설정에서 AI를
+            등록하거나, "뜻·읽기 → 한자" 방향으로 바꿔서 풀어보세요.
+          </p>
+          <Button variant="outline" size="sm" onClick={handleNext}>
+            다음 단어로 건너뛰기
+          </Button>
+        </div>
       )}
 
       {word && !wordBank.wordsLoading && !progress.loading && (
@@ -407,10 +461,11 @@ export function WordBankGamePage({ progress, onExit }: WordBankGamePageProps) {
                 <p className="font-jp text-4xl text-base-content">{wordHasKanji ? word.kanji : word.reading}</p>
               </div>
 
-              {!blockedByMissingApiKey && recallResult === null && (
+              {!readingDirectionBlocked && recallResult === null && (
                 <div className="flex flex-col gap-4">
                   {/* 한자가 없는 단어는 위 카드에서 읽기를 이미 보여줬으니, 그걸 다시 받아쓰게
-                      하는 건 의미가 없어서 뜻만 물어본다. */}
+                      하는 건 의미가 없어서 뜻만 물어본다(AI 모드에서만 — 로컬 채점은 애초에
+                      한자 있는 단어에서만 뜨므로 여기 해당 없음). */}
                   {wordHasKanji && (
                     <div className="flex flex-col items-center gap-2">
                       <span className="font-body text-xs text-base-content/50">읽기 (가나) — 눌러서 직접 입력도 가능해요</span>
@@ -438,29 +493,35 @@ export function WordBankGamePage({ progress, onExit }: WordBankGamePageProps) {
                     </div>
                   )}
 
-                  <label className="flex flex-col gap-1.5">
-                    <span className="font-body text-xs text-base-content/60">뜻 (한국어)</span>
-                    <textarea
-                      value={meaningAnswer}
-                      onChange={(e) => setMeaningAnswer(e.target.value)}
-                      rows={2}
-                      className="font-body textarea textarea-bordered w-full rounded-[var(--radius-field)] text-base"
-                      placeholder="뜻을 한국어로 적어보세요"
-                    />
-                  </label>
+                  {/* 뜻은 AI가 있어야만 유연하게 채점할 수 있어서, AI 미사용일 땐 아예 안 묻는다
+                      (자기신고에 기대지 않기 위해) — 대신 채점 후 정답 카드로 뜻까지 공개한다. */}
+                  {effectiveUseAi && (
+                    <label className="flex flex-col gap-1.5">
+                      <span className="font-body text-xs text-base-content/60">뜻 (한국어)</span>
+                      <textarea
+                        value={meaningAnswer}
+                        onChange={(e) => setMeaningAnswer(e.target.value)}
+                        rows={2}
+                        className="font-body textarea textarea-bordered w-full rounded-[var(--radius-field)] text-base"
+                        placeholder="뜻을 한국어로 적어보세요"
+                      />
+                    </label>
+                  )}
 
                   {gradeError && <p className="font-body text-xs text-secondary">{gradeError}</p>}
 
                   <div className="flex gap-2">
                     <Button
                       variant="primary"
-                      onClick={() => void handleGradeReading()}
+                      onClick={() => (effectiveUseAi ? void handleGradeReading() : handleGradeReadingLocal())}
                       disabled={
-                        grading ||
-                        (wordHasKanji ? readingText.trim() === '' && meaningAnswer.trim() === '' : meaningAnswer.trim() === '')
+                        effectiveUseAi
+                          ? grading ||
+                            (wordHasKanji ? readingText.trim() === '' && meaningAnswer.trim() === '' : meaningAnswer.trim() === '')
+                          : readingText.trim() === ''
                       }
                     >
-                      {grading ? '채점하는 중...' : '채점하기'}
+                      {effectiveUseAi ? (grading ? '채점하는 중...' : '채점하기') : '제출'}
                     </Button>
                     <Button variant="ghost" onClick={handleDontKnowReading} disabled={grading}>
                       모르겠어요
