@@ -9,6 +9,10 @@
 // 단어부터 정렬한 큐를 만들어 순서대로 보여준다. 맞히면 그 단어는 큐에서 빠지고(다음 복습
 // 시각이 늘어나 우선도가 자연히 낮아짐), 틀리거나 "모르겠어요"를 누르면 몇 문제 뒤에 다시
 // 나오도록 큐 중간에 끼워넣는다(안키 학습 페이지의 "다시" 재큐잉과 동일한 방식).
+//
+// "한자 쓰기"와 "읽기·뜻 회상"은 서로 다른 실력이라 진도도 따로 추적한다(skillKey) —
+// 한자를 잘 쓴다고 읽기·뜻까지 잘 안다는 보장이 없고 거꾸로도 마찬가지라서. 그래서 출제 큐도
+// 방향(direction)이 바뀌면 그 방향의 스킬 기준으로 다시 짠다(dueScoreBySkill).
 import { useEffect, useState } from 'react';
 import { KanaInputPanel, type KanaInputMode } from '../components/game/fill-blank/KanaInputPanel';
 import { FeedbackBanner } from '../components/common/FeedbackBanner';
@@ -21,7 +25,7 @@ import type { ProgressController } from '../hooks/useProgress';
 import { WordBankPicker } from '../components/wordbank/WordBankPicker';
 import { gradeWordRecall, hasRequiredApiKey } from '../lib/ai/aiClient';
 import { shuffle } from '../lib/wordbank/shuffle';
-import { pickDueWords } from '../lib/srs/schedule';
+import { pickDueWords, dueScoreBySkill, skillKey } from '../lib/srs/schedule';
 import { normalizeForMatch } from '../lib/kana/answerMatch';
 import { hasKanji } from '../lib/wordbank/hasKanji';
 import type { WordEntry, WordRecallGradeResult } from '../types';
@@ -39,18 +43,21 @@ export function WordBankGamePage({ progress, onExit }: WordBankGamePageProps) {
 
   const [pickerOpen, setPickerOpen] = useState(false);
   const [direction, setDirection] = useState<Direction>('toKanji');
+  // 지금 방향이 채점하는 스킬 — 진도 키(skillKey)와 출제 큐 정렬 기준 둘 다 이걸 쓴다.
+  const currentSkill = direction === 'toKanji' ? 'kanji' : 'reading';
 
-  // 우선순위(SRS) 순으로 정렬된 출제 큐. 단어장/진도 로딩이 끝나면 (다시) 짠다 — progress.entries
-  // 자체는 의존성에 안 넣는다(안키 학습 페이지와 동일한 이유: 채점마다 큐가 재구성되는 걸 막기 위해).
+  // 우선순위(SRS) 순으로 정렬된 출제 큐. 단어장/진도 로딩이 끝나거나 방향(=스킬)이 바뀌면
+  // (다시) 짠다 — progress.entries 자체는 의존성에 안 넣는다(안키 학습 페이지와 동일한 이유:
+  // 채점마다 큐가 재구성되는 걸 막기 위해).
   const [queue, setQueue] = useState<WordEntry[]>([]);
   // 방금 답한 결과 — "다음 문제"를 누를 때 큐를 어떻게 진행시킬지(빼기 vs 뒤로 재큐잉) 결정한다.
   const [lastOutcome, setLastOutcome] = useState<'correct' | 'missed' | null>(null);
 
   useEffect(() => {
     if (wordBank.wordsLoading || progress.loading) return;
-    setQueue(pickDueWords(shuffle(wordBank.words), progress.entries, true));
+    setQueue(pickDueWords(shuffle(wordBank.words), progress.entries, true, new Date(), dueScoreBySkill(currentSkill)));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [wordBank.words, wordBank.wordsLoading, progress.loading]);
+  }, [wordBank.words, wordBank.wordsLoading, progress.loading, currentSkill]);
 
   const word = queue[0] ?? null;
 
@@ -129,7 +136,7 @@ export function WordBankGamePage({ progress, onExit }: WordBankGamePageProps) {
       if (rest.length === 0) {
         // 큐를 다 돌았으면(전부 맞혔으면) 최신 진도로 다시 짜서 계속 이어간다 — 이 게임은
         // 안키 학습과 달리 "세션 종료" 없이 계속 도는 게임이라서.
-        return pickDueWords(shuffle(wordBank.words), progress.entries, true);
+        return pickDueWords(shuffle(wordBank.words), progress.entries, true, new Date(), dueScoreBySkill(currentSkill));
       }
       return rest;
     });
@@ -149,9 +156,9 @@ export function WordBankGamePage({ progress, onExit }: WordBankGamePageProps) {
     // 동일하게 최우선으로 다시 나오게 한다.
     if (correct) {
       setCorrectCount((n) => n + 1);
-      progress.recordReview(word.id, 'good');
+      progress.recordReview(skillKey(word.id, 'kanji'), 'good');
     } else {
-      progress.recordMiss(word.id);
+      progress.recordMiss(skillKey(word.id, 'kanji'));
     }
   };
 
@@ -162,7 +169,7 @@ export function WordBankGamePage({ progress, onExit }: WordBankGamePageProps) {
     setDontKnow(true);
     setAnsweredCount((n) => n + 1);
     setLastOutcome('missed');
-    progress.recordMiss(word.id);
+    progress.recordMiss(skillKey(word.id, 'kanji'));
   };
 
   /** "한자 → 읽기·뜻" 채점 — AI 사용. 한자가 없는 단어는 이미 읽기를 보여준 상태라 뜻만 채점한다. */
@@ -184,10 +191,10 @@ export function WordBankGamePage({ progress, onExit }: WordBankGamePageProps) {
       setLastOutcome(correct ? 'correct' : 'missed');
       if (correct) {
         setCorrectCount((n) => n + 1);
-        progress.recordReview(word.id, 'good');
+        progress.recordReview(skillKey(word.id, 'reading'), 'good');
       } else {
         // 틀렸을 때도 "모르겠어요"와 동일하게 최우선으로 다시 나오게 한다.
-        progress.recordMiss(word.id);
+        progress.recordMiss(skillKey(word.id, 'reading'));
       }
     } catch (e) {
       setGradeError(e instanceof Error ? e.message : '채점에 실패했습니다.');
@@ -201,7 +208,7 @@ export function WordBankGamePage({ progress, onExit }: WordBankGamePageProps) {
     if (!word) return;
     setAnsweredCount((n) => n + 1);
     setLastOutcome('missed');
-    progress.recordMiss(word.id);
+    progress.recordMiss(skillKey(word.id, 'reading'));
     setRecallResult({
       readingCorrect: false,
       meaningCorrect: false,

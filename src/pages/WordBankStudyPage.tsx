@@ -1,8 +1,11 @@
-// 단어장 학습(자기평가 플래시카드 + Anki 방식 SRS): 단어장 맞추기와 달리 정답을 "맞혀야" 하는 게
-// 아니라, 한자를 보여주고 사용자가 스스로 다시/어려움/보통/쉬움 중 하나로 평가해서 복습 간격을
-// 조절한다(Anki의 4버튼 평가 + 이지팩터 방식, lib/srs/schedule.ts 참고).
-// 결과는 saves/progress.json(useProgress)에 단어별로 저장돼서, 다음에 왔을 때 복습이 급한
-// 단어부터 우선 나온다. "다시"를 고른 카드는 이번 세션 안에서 몇 장 뒤에 다시 나온다(Anki와 동일).
+// 단어장 학습: 복습이 급한 단어부터 순서대로 보여주는 플래시카드 열람 도구.
+//
+// 예전엔 여기서도 다시/어려움/보통/쉬움 4버튼으로 스스로 평가해서 SRS 진도를 직접 갱신했는데,
+// 그건 결국 "내가 맞혔다/틀렸다"를 사용자 자기신고에만 의존하는 셈이라 정확도를 보장할 수 없다.
+// 그래서 이 페이지는 더 이상 진도를 직접 기록하지 않는다 — 카드를 급한 순서로 보여주고
+// (읽어보기/손으로 써보기 연습만 제공), 실제 진도 갱신은 빈칸 채우기/단어장 맞추기/번역 게임에서
+// 실제로 답을 맞히거나 틀렸을 때만 일어난다. 우선순위 정렬은 여전히 progress.entries를 읽어서
+// 하지만(combinedDueScore — 한자 쓰기/읽기·뜻 회상 중 더 급한 쪽 기준), 쓰지는 않는다.
 import { useEffect, useState } from 'react';
 import { ProgressStat } from '../components/common/ProgressStat';
 import { Button } from '../components/common/Button';
@@ -11,7 +14,7 @@ import { KanaInputPanel, type KanaInputMode } from '../components/game/fill-blan
 import { useWordBank } from '../hooks/useWordBank';
 import type { ProgressController } from '../hooks/useProgress';
 import { WordBankPicker } from '../components/wordbank/WordBankPicker';
-import { pickDueWords, previewInterval, formatInterval, type Rating } from '../lib/srs/schedule';
+import { pickDueWords, combinedDueScore } from '../lib/srs/schedule';
 import { shuffle } from '../lib/wordbank/shuffle';
 import { hasKanji } from '../lib/wordbank/hasKanji';
 import type { WordEntry } from '../types';
@@ -20,15 +23,6 @@ interface WordBankStudyPageProps {
   progress: ProgressController;
   onExit?: () => void;
 }
-
-// 두 줄(라벨 + 간격 미리보기)을 보여줘야 해서 공용 Button(한 줄짜리 고정 높이) 대신
-// btn 클래스를 직접 써서 높이를 내용에 맞춘다.
-const RATING_BUTTONS: { rating: Rating; label: string; btnClass: string }[] = [
-  { rating: 'again', label: '다시', btnClass: 'btn-outline btn-primary' },
-  { rating: 'hard', label: '어려움', btnClass: 'btn-outline btn-primary' },
-  { rating: 'good', label: '보통', btnClass: 'btn-primary' },
-  { rating: 'easy', label: '쉬움', btnClass: 'btn-secondary' },
-];
 
 export function WordBankStudyPage({ progress, onExit }: WordBankStudyPageProps) {
   const wordBank = useWordBank(true);
@@ -47,37 +41,33 @@ export function WordBankStudyPage({ progress, onExit }: WordBankStudyPageProps) 
     setPracticeChars([]);
   };
 
-  // 이번 세션에서 풀 카드들. "다시"를 고르면 이 큐 안에서 몇 장 뒤로 다시 끼워넣는다(Anki처럼).
+  // 이번 세션에서 볼 카드들. 진도를 직접 기록하지 않으므로, "다음 단어"를 누르면 그냥 큐에서 빠질
+  // 뿐(다시 끼워넣는 재큐잉 없음) — 실제로 이 단어를 언제 다시 봐야 하는지는 다른 게임들에서 실제로
+  // 맞히거나 틀렸을 때 결정된다.
   const [queue, setQueue] = useState<WordEntry[]>([]);
   const [seeded, setSeeded] = useState(false);
   const [initialQueueSize, setInitialQueueSize] = useState(0);
-
-  const [sessionCounts, setSessionCounts] = useState<Record<Rating, number>>({
-    again: 0,
-    hard: 0,
-    good: 0,
-    easy: 0,
-  });
+  const [reviewedCount, setReviewedCount] = useState(0);
 
   // 단어장/모드가 바뀌거나 데이터 로딩이 끝났을 때 한 번 큐를 (다시) 짠다.
-  // progress.entries 자체는 의존성에 안 넣는다 — 채점마다 세션 큐가 재구성되는 걸 막기 위해서.
+  // progress.entries 자체는 의존성에 안 넣는다 — 다른 게임에서 진도가 바뀔 때마다 이 세션 큐가
+  // 재구성되는 걸 막기 위해서.
   useEffect(() => {
     if (wordBank.wordsLoading || progress.loading) return;
     // pickDueWords는 급한 정도로 정렬하는데, 안 배운 새 단어끼리는 급한 정도가 다 같아서(무기한
     // 대상) 안 섞으면 CSV 순서 그대로 나온다. 먼저 섞어두면 안정 정렬 특성상 급한 순서는 그대로
     // 지키면서 동급 안에서는 무작위로 나온다.
-    const due = pickDueWords(shuffle(wordBank.words), progress.entries, studyAll);
+    const due = pickDueWords(shuffle(wordBank.words), progress.entries, studyAll, new Date(), combinedDueScore);
     setQueue(due);
     setInitialQueueSize(due.length);
     setSeeded(true);
-    setSessionCounts({ again: 0, hard: 0, good: 0, easy: 0 });
+    setReviewedCount(0);
     setFlipped(false);
     resetPractice();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [wordBank.words, wordBank.wordsLoading, progress.loading, studyAll]);
 
   const word = queue[0] ?? null;
-  const currentEntry = word ? progress.entries.get(word.id) : undefined;
   const wordHasKanji = word !== null && hasKanji(word);
 
   // 카드가 바뀌면 "손으로 써보기"의 기본 입력 모드도 그 단어에 맞춘다 — 한자가 없는 단어면
@@ -89,22 +79,13 @@ export function WordBankStudyPage({ progress, onExit }: WordBankStudyPageProps) 
   const wordBankEmpty = !wordBank.wordsLoading && wordBank.words.length === 0;
   const nothingDue = seeded && initialQueueSize === 0 && wordBank.words.length > 0;
   const sessionDone = seeded && initialQueueSize > 0 && queue.length === 0;
-  const sessionTotal = sessionCounts.again + sessionCounts.hard + sessionCounts.good + sessionCounts.easy;
 
   const handleFlip = () => setFlipped(true);
 
-  const handleRate = (rating: Rating) => {
-    if (!word) return;
-    progress.recordReview(word.id, rating); // 로컬 즉시 반영, 드라이브 저장은 나중에 한 번에(useProgress)
-    setSessionCounts((prev) => ({ ...prev, [rating]: prev[rating] + 1 }));
-
-    setQueue((prev) => {
-      const rest = prev.slice(1);
-      if (rating !== 'again') return rest;
-      // "다시"는 몇 장 뒤에 다시 나오도록 큐 중간에 끼워넣는다.
-      const insertAt = Math.min(rest.length, 3);
-      return [...rest.slice(0, insertAt), word, ...rest.slice(insertAt)];
-    });
+  /** 다음 단어로 넘어간다 — 여기선 채점을 안 하니 그냥 큐에서 빼기만 한다. */
+  const handleNextCard = () => {
+    setQueue((prev) => prev.slice(1));
+    setReviewedCount((n) => n + 1);
     setFlipped(false);
     resetPractice();
   };
@@ -114,10 +95,10 @@ export function WordBankStudyPage({ progress, onExit }: WordBankStudyPageProps) 
   };
 
   const handleRestart = () => {
-    const due = pickDueWords(shuffle(wordBank.words), progress.entries, studyAll);
+    const due = pickDueWords(shuffle(wordBank.words), progress.entries, studyAll, new Date(), combinedDueScore);
     setQueue(due);
     setInitialQueueSize(due.length);
-    setSessionCounts({ again: 0, hard: 0, good: 0, easy: 0 });
+    setReviewedCount(0);
     setFlipped(false);
     resetPractice();
   };
@@ -137,7 +118,7 @@ export function WordBankStudyPage({ progress, onExit }: WordBankStudyPageProps) 
       </header>
 
       <div className="flex flex-wrap items-center gap-6">
-        <ProgressStat label="이번 세션" value={sessionCounts.good + sessionCounts.easy} suffix={`/${sessionTotal}`} />
+        <ProgressStat label="이번 세션 확인" value={reviewedCount} />
         {!sessionDone && queue.length > 0 && (
           <ProgressStat label="남은 카드" value={queue.length} />
         )}
@@ -145,6 +126,12 @@ export function WordBankStudyPage({ progress, onExit }: WordBankStudyPageProps) 
           {pickerOpen ? '단어장 선택 닫기' : '단어장 선택'}
         </Button>
       </div>
+
+      <p className="font-body text-xs text-base-content/40">
+        여기서는 채점하지 않아요 — 실제 학습 진도는 빈칸 채우기·단어장 맞추기·번역 게임에서 실제로
+        답을 맞히거나 틀렸을 때만 갱신돼요. 이 페이지는 복습이 급한 단어를 순서대로 보여주는
+        열람용이에요.
+      </p>
 
       {wordBank.wordsError && (
         <p className="font-body text-xs text-secondary">단어장 로드 실패: {wordBank.wordsError}</p>
@@ -223,7 +210,7 @@ export function WordBankStudyPage({ progress, onExit }: WordBankStudyPageProps) 
           </div>
 
           {/* 손으로 써보기 — 채점하지 않는 순수 연습용. 답을 이미 봤으니 그걸 보고 따라 써도 되고,
-              가리고 기억나는 대로 써봐도 된다. 다시/어려움/보통/쉬움 평가와는 무관하다. */}
+              가리고 기억나는 대로 써봐도 된다. */}
           {flipped && (
             <div className="flex w-full max-w-sm flex-col items-center gap-3">
               <Button variant="ghost" size="sm" onClick={() => setWritingOpen((v) => !v)}>
@@ -263,21 +250,9 @@ export function WordBankStudyPage({ progress, onExit }: WordBankStudyPageProps) 
           )}
 
           {flipped && (
-            <div className="flex gap-2">
-              {RATING_BUTTONS.map(({ rating, label, btnClass }) => (
-                <button
-                  key={rating}
-                  type="button"
-                  onClick={() => handleRate(rating)}
-                  className={`btn h-auto min-h-0 flex-col gap-0.5 rounded-[var(--radius-field)] px-3 py-2 ${btnClass}`}
-                >
-                  <span className="font-body text-sm">{label}</span>
-                  <span className="font-body text-[10px] opacity-70">
-                    {formatInterval(previewInterval(currentEntry, rating))}
-                  </span>
-                </button>
-              ))}
-            </div>
+            <Button variant="primary" onClick={handleNextCard}>
+              다음 단어
+            </Button>
           )}
         </div>
       )}
@@ -285,10 +260,7 @@ export function WordBankStudyPage({ progress, onExit }: WordBankStudyPageProps) 
       {sessionDone && (
         <div className="flex flex-col items-center gap-3 rounded-[var(--radius-box)] border border-base-300 bg-base-100 p-8">
           <p className="font-display text-lg text-base-content">이번 세션 끝! 🙌</p>
-          <p className="font-body text-sm text-base-content/60">
-            다시 {sessionCounts.again} · 어려움 {sessionCounts.hard} · 보통 {sessionCounts.good} · 쉬움{' '}
-            {sessionCounts.easy}
-          </p>
+          <p className="font-body text-sm text-base-content/60">{reviewedCount}개 단어를 확인했어요.</p>
           <Button variant="primary" size="sm" onClick={handleRestart}>
             처음부터 다시
           </Button>

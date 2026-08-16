@@ -21,6 +21,7 @@ import { WordBankPicker } from '../components/wordbank/WordBankPicker';
 import { useGrammarNotes } from '../hooks/useGrammarNotes';
 import { generateFillBlankQuestion, hasRequiredApiKey } from '../lib/ai/aiClient';
 import { shuffle } from '../lib/wordbank/shuffle';
+import { skillKey } from '../lib/srs/schedule';
 import { normalizeForMatch } from '../lib/kana/answerMatch';
 import { hasKanji } from '../lib/wordbank/hasKanji';
 import type { FillBlankQuestion } from '../types';
@@ -107,13 +108,15 @@ export function FillBlankGamePage({ progress, onExit }: FillBlankGamePageProps) 
     setSubmitted(true);
     setAnsweredCount((n) => n + 1);
     // AI가 즉석에서 지어낸 단어(단어장에 없는 단어)는 단어장-단어별 진도에 남기지 않는다.
+    // 여기서 쓰는 글자는 어차피 한자(빈칸에 정답 문자열 그대로 쓰기)라, 단어장 맞추기의
+    // "뜻·읽기 → 한자" 방향과 같은 "kanji" 스킬 진도로 합쳐서 기록한다.
     const tracked = wordBank.words.some((w) => w.id === question.targetWord.id);
     if (correct) {
       setCorrectCount((n) => n + 1);
-      if (tracked) progress.recordReview(question.targetWord.id, 'good');
+      if (tracked) progress.recordReview(skillKey(question.targetWord.id, 'kanji'), 'good');
     } else if (tracked) {
       // 틀렸을 때도 "모르겠어요"와 똑같이 최우선으로 다시 나오게 한다.
-      progress.recordMiss(question.targetWord.id);
+      progress.recordMiss(skillKey(question.targetWord.id, 'kanji'));
     }
   };
 
@@ -124,7 +127,7 @@ export function FillBlankGamePage({ progress, onExit }: FillBlankGamePageProps) 
     setDontKnow(true);
     setAnsweredCount((n) => n + 1);
     if (wordBank.words.some((w) => w.id === question.targetWord.id)) {
-      progress.recordMiss(question.targetWord.id);
+      progress.recordMiss(skillKey(question.targetWord.id, 'kanji'));
     }
   };
 
