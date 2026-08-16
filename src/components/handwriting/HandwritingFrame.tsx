@@ -81,10 +81,11 @@ export function HandwritingFrame({
         )}
       </div>
       <div className="flex gap-2">
-        <Button variant="ghost" size="sm" onClick={handleUndo}>
+        {/* 한 획 취소가 지우기보다 훨씬 자주 쓰는 동작이라, 지우기(전체 삭제)보다 더 강조한다. */}
+        <Button variant="outline" size="sm" onClick={handleUndo}>
           한 획 취소
         </Button>
-        <Button variant="outline" size="sm" onClick={handleClear}>
+        <Button variant="ghost" size="sm" onClick={handleClear}>
           지우기
         </Button>
         <Button variant="primary" size="sm" onClick={handleRecognize}>
