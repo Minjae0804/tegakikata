@@ -37,8 +37,10 @@ const DEFAULT_FILES: Record<string, string> = {
 let accessToken: string | null = null;
 let tokenExpiresAt = 0; // epoch ms — 액세스 토큰이 이 시각 이후로 무효
 let tokenClient: GoogleTokenClient | null = null;
-// 조용한 재발급(prompt: '')이 진행 중일 때, initDriveAuth의 콜백이 그 결과를 여기로 돌려준다.
-let pendingRefresh: { resolve: () => void; reject: (e: Error) => void } | null = null;
+// 진행 중인 토큰 요청(최초 로그인/조용한 재발급/새로고침 후 조용한 복원 전부 공용) — GIS는 콜백을
+// tokenClient당 하나만 두는 구조라서, 지금 어떤 요청이 결과를 기다리고 있는지 여기로 추적해서
+// 콜백이 왔을 때 그 요청의 프로미스를 resolve/reject한다.
+let pendingRequest: { resolve: () => void; reject: (e: Error) => void } | null = null;
 
 // 만료 이 시간 전부터는 "곧 만료됨"으로 보고 미리 갱신한다 — 요청 도중에 만료돼버리는 걸 피하기 위해.
 const TOKEN_REFRESH_MARGIN_MS = 2 * 60 * 1000;
@@ -88,45 +90,68 @@ function waitForGoogleIdentityServices(timeoutMs = 8000): Promise<void> {
  */
 const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID as string | undefined;
 
-/** Google Identity Services 토큰 클라이언트를 초기화하고, 사용자 동의를 받아 액세스 토큰을 발급받는다. */
-export async function initDriveAuth(): Promise<void> {
+/** tokenClient가 없으면 만들어둔다 — 콜백 하나로 로그인/조용한 재발급/조용한 복원을 전부 처리한다. */
+function ensureTokenClient(): GoogleTokenClient {
+  if (tokenClient) return tokenClient;
   if (!GOOGLE_CLIENT_ID) {
     throw new Error(
       'VITE_GOOGLE_CLIENT_ID가 설정되지 않았습니다. .env.example을 참고해 .env 파일을 만들어주세요.'
     );
   }
-  await waitForGoogleIdentityServices();
-
-  return new Promise((resolve, reject) => {
-    tokenClient = window.google!.accounts.oauth2.initTokenClient({
-      client_id: GOOGLE_CLIENT_ID,
-      scope: DRIVE_SCOPE,
-      // 이 콜백은 최초 로그인 때뿐 아니라, 아래 ensureFreshToken()의 조용한 재발급 요청이
-      // 끝났을 때도 똑같이 호출된다(GIS는 콜백을 tokenClient당 하나만 두는 구조라서) —
-      // pendingRefresh가 있으면 그쪽을, 없으면 최초 로그인 프로미스를 resolve/reject한다.
-      callback: (response) => {
-        if (response.error) {
-          const err = new Error(`Drive 인증 실패: ${response.error}`);
-          if (pendingRefresh) {
-            pendingRefresh.reject(err);
-            pendingRefresh = null;
-          } else {
-            reject(err);
-          }
-          return;
-        }
-        accessToken = response.access_token;
-        tokenExpiresAt = Date.now() + response.expires_in * 1000;
-        if (pendingRefresh) {
-          pendingRefresh.resolve();
-          pendingRefresh = null;
-        } else {
-          resolve();
-        }
-      },
-    });
-    tokenClient.requestAccessToken();
+  tokenClient = window.google!.accounts.oauth2.initTokenClient({
+    client_id: GOOGLE_CLIENT_ID,
+    scope: DRIVE_SCOPE,
+    callback: (response) => {
+      const pending = pendingRequest;
+      pendingRequest = null;
+      if (response.error) {
+        pending?.reject(new Error(`Drive 인증 실패: ${response.error}`));
+        return;
+      }
+      accessToken = response.access_token;
+      tokenExpiresAt = Date.now() + response.expires_in * 1000;
+      pending?.resolve();
+    },
   });
+  return tokenClient;
+}
+
+/**
+ * 토큰을 요청하고 결과를 기다린다. prompt를 안 주면(undefined) 기본 동작(필요하면 동의 화면 표시),
+ * ''을 주면 화면 없이 조용히(이미 동의받은 적 있고 브라우저 세션이 살아있을 때만 성공) 시도한다.
+ */
+function requestToken(prompt?: '' | 'none' | 'consent' | 'select_account'): Promise<void> {
+  return new Promise((resolve, reject) => {
+    pendingRequest = { resolve, reject };
+    const client = ensureTokenClient();
+    if (prompt === undefined) client.requestAccessToken();
+    else client.requestAccessToken({ prompt });
+  });
+}
+
+/** Google Identity Services 토큰 클라이언트를 초기화하고, 사용자 동의를 받아 액세스 토큰을 발급받는다. */
+export async function initDriveAuth(): Promise<void> {
+  await waitForGoogleIdentityServices();
+  await requestToken();
+}
+
+/**
+ * 새로고침 직후 로그인 상태를 그대로 이어가기 위해 쓴다. GIS 액세스 토큰은 새로고침하면 메모리에서
+ * 사라지지만(이 모듈의 accessToken은 그냥 변수라 유지되지 않는다), 예전에 한 번이라도 연결해서
+ * 동의를 받은 적이 있고(로컬에 폴더 ID 캐시가 남아있음) 브라우저의 구글 로그인 세션이 아직
+ * 살아있으면, 화면에 아무것도 띄우지 않고 다시 토큰을 받아올 수 있다. 실패해도(팝업 차단,
+ * 구글 세션 만료, 동의 철회 등) 조용히 false만 반환한다 — 그러면 화면은 기존처럼 "다시 연결"
+ * 버튼을 보여주면 된다.
+ */
+export async function tryRestoreDriveAuth(): Promise<boolean> {
+  if (!GOOGLE_CLIENT_ID || !readFolderIdCache()) return false;
+  try {
+    await waitForGoogleIdentityServices();
+    await requestToken('');
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 export function isDriveAuthenticated(): boolean {
@@ -156,10 +181,7 @@ function ensureFreshToken(): Promise<void> {
   if (!tokenClient) {
     return Promise.reject(new Error('Drive에 인증되지 않았습니다. initDriveAuth를 먼저 호출하세요.'));
   }
-  return new Promise((resolve, reject) => {
-    pendingRefresh = { resolve, reject };
-    tokenClient!.requestAccessToken({ prompt: '' });
-  });
+  return requestToken('');
 }
 
 /**

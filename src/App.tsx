@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { OnboardingPage } from './pages/OnboardingPage';
 import { HomePage } from './pages/HomePage';
 import { FillBlankGamePage } from './pages/FillBlankGamePage';
@@ -7,14 +7,33 @@ import { WordBankGamePage } from './pages/WordBankGamePage';
 import { WordBankStudyPage } from './pages/WordBankStudyPage';
 import { SettingsPage } from './pages/SettingsPage';
 import { useProgress } from './hooks/useProgress';
-import { isDriveAuthenticated, signOutDrive } from './lib/drive/driveClient';
+import { isDriveAuthenticated, signOutDrive, tryRestoreDriveAuth } from './lib/drive/driveClient';
 import { LanguageProvider } from './lib/i18n/LanguageContext';
 
 type View = 'home' | 'fill-blank' | 'translate' | 'wordbank' | 'wordbank-study' | 'settings';
 
 function App() {
   const [driveReady, setDriveReady] = useState(isDriveAuthenticated());
+  // 새로고침하면 driveReady는 항상 false로 시작한다(액세스 토큰이 메모리에만 있어서) — 그렇다고
+  // 바로 온보딩 화면부터 보여주면 이전에 연결했던 사용자도 매번 로그인 화면을 다시 봐야 한다.
+  // 그래서 마운트 시점에 딱 한 번, 화면엔 아무것도 안 띄우고 조용히 토큰 복원을 시도해본다 —
+  // 성공하면 바로 홈으로, 실패하면(최초 방문/세션 만료 등) 기존처럼 온보딩을 보여준다.
+  const [restoringAuth, setRestoringAuth] = useState(!isDriveAuthenticated());
   const [view, setView] = useState<View>('home');
+
+  useEffect(() => {
+    if (driveReady) return;
+    let cancelled = false;
+    void tryRestoreDriveAuth().then((restored) => {
+      if (cancelled) return;
+      if (restored) setDriveReady(true);
+      setRestoringAuth(false);
+    });
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- 새로고침 직후 마운트 시점에 한 번만 시도한다
+  }, []);
 
   // 단어장 학습 진도(Anki SRS)는 게임 4종(빈칸 채우기/번역/단어장 맞추기/단어장 학습)이 전부 같은
   // 곳에 기록한다. 훅을 화면마다 따로 부르면 각자 자기 메모리에서만 진도를 들고 있다가 화면을
@@ -36,6 +55,14 @@ function App() {
   };
 
   const renderContent = () => {
+    if (restoringAuth) {
+      return (
+        <div className="flex flex-col items-center gap-3 p-12">
+          <span className="loading loading-spinner loading-md text-primary" />
+          <p className="font-body text-xs text-base-content/50">이전 로그인 정보를 확인하는 중...</p>
+        </div>
+      );
+    }
     if (!driveReady) return <OnboardingPage onComplete={() => setDriveReady(true)} />;
 
     switch (view) {
