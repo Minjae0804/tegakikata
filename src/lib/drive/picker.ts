@@ -5,7 +5,7 @@
 // Picker는 GIS(로그인용)와는 별개의 스크립트(gapi)와, OAuth 클라이언트 ID와도 별개인
 // "API 키"(VITE_GOOGLE_API_KEY)가 필요하다. .env.example 참고.
 
-import { getAccessToken } from './driveClient';
+import { getFreshAccessToken } from './driveClient';
 
 const PICKER_API_KEY = import.meta.env.VITE_GOOGLE_API_KEY as string | undefined;
 const PICKER_APP_ID = import.meta.env.VITE_GOOGLE_APP_ID as string | undefined;
@@ -39,8 +39,8 @@ export interface PickedFile {
 
 /** 구글 피커를 열어서 사용자가 드라이브의 CSV 파일을 직접 선택하게 한다 (여러 개 선택 가능). */
 export async function openCsvFilePicker(): Promise<PickedFile[]> {
-  const accessToken = getAccessToken();
-  if (!accessToken) throw new Error('Drive에 인증되지 않았습니다.');
+  // 피커를 열기 전에 토큰이 만료돼 있을 수도 있으니(오래 열어둔 세션), 필요하면 조용히 갱신한다.
+  const accessToken = await getFreshAccessToken();
   if (!PICKER_API_KEY) {
     throw new Error(
       'VITE_GOOGLE_API_KEY가 설정되지 않았습니다. .env.example을 참고해 값을 채워주세요.'

@@ -4,8 +4,9 @@
 // 성능 관련 설계:
 // - 진도는 Map<wordId, ProgressEntry>로 색인해서 들고 있는다 — 단어 수가 많아져도 조회/갱신이 O(1).
 // - 드라이브는 매 답변마다 쓰지 않는다. recordReview는 로컬 상태 + localStorage 캐시만 즉시 갱신하고
-//   (그래서 UI는 기다릴 필요가 없다), 실제 드라이브 저장은 세션이 끝날 때(페이지를 벗어날 때) 한 번에
-//   모아서 반영한다 — Drive API 왕복(검색+갱신)이 매번 드는 지연을 없애기 위함.
+//   (그래서 UI는 기다릴 필요가 없다), 실제 드라이브 저장은 1분마다 자동으로 한 번에 모아서
+//   반영한다(+ 화면 이동/언마운트 시점에도 한 번 더) — Drive API 왕복(검색+갱신)이 매번 드는
+//   지연을 없애면서도, "나가기를 눌러야만 저장됨" 같은 상황 없이 주기적으로 안전하게 저장한다.
 // - 저장 포맷도 압축한다: 필드명을 축약하고(StoredProgressEntry), pretty-print 없이 컴팩트 JSON으로 쓴다.
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { ProgressEntry, ProgressStore, StoredProgressEntry } from '../types';
@@ -130,6 +131,17 @@ export function useProgress(enabled = true) {
   useEffect(() => {
     if (enabled) void refresh();
   }, [enabled, refresh]);
+
+  // 저장 기준은 "나갈 때"가 아니라 1분마다 — 화면을 안 벗어나고 오래 머물러도 주기적으로
+  // 안전하게 반영되게 한다. dirtyRef가 false면 flush() 안에서 바로 반환하니 매분 불필요한
+  // 쓰기가 나가진 않는다.
+  useEffect(() => {
+    if (!enabled) return;
+    const intervalId = setInterval(() => {
+      void flush();
+    }, 60 * 1000);
+    return () => clearInterval(intervalId);
+  }, [enabled, flush]);
 
   // 이 훅을 쓰는 화면을 벗어날 때(언마운트) 밀린 진도를 한 번에 저장한다.
   useEffect(() => {
