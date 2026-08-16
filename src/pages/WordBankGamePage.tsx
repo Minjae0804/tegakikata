@@ -19,7 +19,10 @@
 // 고른 문법 노트를 참고해서 자연스러운 활용/파생형을 하나 만들어(飲む→飲みすぎる, 食べる→食べたい
 // 등) 그걸로 문제를 낸다. 두 방향 모두에서 동작한다 — 화면 표시/채점 대상만 활용형(displayWord)으로
 // 바뀌고, 학습 진도(SRS)는 그대로 원래 단어(word.id) 기준으로 쌓인다(활용형은 매번 새로 만들어지는
-// 임시 문제라 그 자체를 단어처럼 따로 추적하지 않는다).
+// 임시 문제라 그 자체를 단어처럼 따로 추적하지 않는다). 매번 활용형만 나오면 사전형을 익힐 기회가
+// 없으므로 VARIATION_SKIP_RATE 확률로는 활용 없이 사전형 그대로 낸다. "뜻·읽기 → 한자" 방향의
+// 읽기 힌트는 활용형이 켜져 있어도 항상 사전형 읽기(word.reading)만 보여준다 — 활용된 읽기를
+// 그대로 보여주면 활용 패턴 자체가 다 드러나서(예: のみすぎる) 정답을 알려주는 셈이라서다.
 import { useEffect, useMemo, useState } from 'react';
 import { KanaInputPanel, type KanaInputMode } from '../components/game/fill-blank/KanaInputPanel';
 import { FeedbackBanner } from '../components/common/FeedbackBanner';
@@ -46,6 +49,10 @@ interface WordBankGamePageProps {
 }
 
 type Direction = 'toKanji' | 'toReading';
+
+// "AI 활용형 출제"가 켜져 있어도 매번 활용형만 나오면 사전형 자체를 익힐 기회가 없으므로,
+// 이 확률만큼은 활용 없이 사전형 그대로 낸다.
+const VARIATION_SKIP_RATE = 0.3;
 
 export function WordBankGamePage({ progress, wordBank, onExit }: WordBankGamePageProps) {
   const { config } = useAppConfig(true);
@@ -92,6 +99,13 @@ export function WordBankGamePage({ progress, wordBank, onExit }: WordBankGamePag
   useEffect(() => {
     if (!effectiveUseVariation || !word || !config) {
       setVariation(null);
+      return;
+    }
+    // 활용형만 계속 나오면 사전형 자체를 외울 기회가 줄어드니, 일정 확률로는 활용 없이 사전형
+    // 그대로 낸다(그만큼 AI 호출도 아낀다). 문제(word)가 바뀔 때마다 새로 판단한다.
+    if (Math.random() < VARIATION_SKIP_RATE) {
+      setVariation(null);
+      setVariationError(null);
       return;
     }
     let cancelled = false;
@@ -462,8 +476,12 @@ export function WordBankGamePage({ progress, wordBank, onExit }: WordBankGamePag
                 </span>
                 <p className="font-body text-2xl text-base-content">{displayWord.meaning}</p>
                 {/* 한자가 없는 단어는 읽기 자체가 정답이라 여기서 미리 보여주면 답을 그냥 알려주는
-                    셈이 되므로 숨긴다 — 한자가 있을 때만 읽기를 힌트로 보여준다. */}
-                {wordHasKanji && <p className="font-jp text-base text-base-content/50">{displayWord.reading}</p>}
+                    셈이 되므로 숨긴다 — 한자가 있을 때만 읽기를 힌트로 보여준다.
+                    활용형이 켜져 있어도 힌트는 활용된 읽기(displayWord.reading)가 아니라 항상
+                    원형(사전형, word.reading)만 보여준다 — 활용된 읽기를 그대로 보여주면 활용
+                    패턴 자체를 다 알려주는 셈이라(예: のみすぎる → 飲みすぎる는 거의 받아쓰기가
+                    돼버림), 원형 읽기 정도만 힌트로 주고 활용은 스스로 하게 한다. */}
+                {wordHasKanji && <p className="font-jp text-base text-base-content/50">{word.reading}</p>}
               </div>
 
               {/* 한자 입력(필기) 모드에서는 타이핑으로 답을 써버리면 필기 연습 의미가 없어지므로
