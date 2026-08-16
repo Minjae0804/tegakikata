@@ -7,7 +7,8 @@
 // 단어 풀은 드라이브 wordbanks/ 폴더에서 사용자가 직접 고른 CSV(useWordBank)를 우선 쓰고,
 // 아직 아무것도 선택 안 했으면 임시 샘플로 대체한다. "단어장 선택" 버튼으로 하위 폴더 -> CSV 파일
 // 순서로 탐색해서 원하는 파일만 골라 적용할 수 있다.
-// AI 예문 생성 시 grammar.md(useGrammarNotes)를 컨텍스트로 같이 넘긴다.
+// AI 예문 생성 시 grammar/ 폴더에서 고른 문법 노트(useGrammarBank)를 컨텍스트로 같이 넘긴다 —
+// 어떤 파일을 쓸지는 단어장 맞추기 화면의 "문법 노트 선택"에서 고른 게 그대로 적용된다(캐시 공유).
 import { useEffect, useMemo, useState } from 'react';
 import { KanaInputPanel, type KanaInputMode } from '../components/game/fill-blank/KanaInputPanel';
 import { FeedbackBanner } from '../components/common/FeedbackBanner';
@@ -18,7 +19,7 @@ import { useAppConfig } from '../hooks/useAppConfig';
 import type { WordBankController } from '../hooks/useWordBank';
 import type { ProgressController } from '../hooks/useProgress';
 import { WordBankPicker } from '../components/wordbank/WordBankPicker';
-import { useGrammarNotes } from '../hooks/useGrammarNotes';
+import { useGrammarBank } from '../hooks/useGrammarBank';
 import { generateFillBlankQuestion, hasRequiredApiKey } from '../lib/ai/aiClient';
 import { shuffle } from '../lib/wordbank/shuffle';
 import { skillKey } from '../lib/srs/schedule';
@@ -34,7 +35,7 @@ interface FillBlankGamePageProps {
 
 export function FillBlankGamePage({ progress, wordBank, onExit }: FillBlankGamePageProps) {
   const { config } = useAppConfig(true);
-  const { notes: grammarNotes } = useGrammarNotes(true);
+  const { notes: grammarNotes } = useGrammarBank(true);
 
   const [pickerOpen, setPickerOpen] = useState(false);
 

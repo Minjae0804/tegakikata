@@ -37,8 +37,9 @@ export interface PickedFile {
   name: string;
 }
 
-/** 구글 피커를 열어서 사용자가 드라이브의 CSV 파일을 직접 선택하게 한다 (여러 개 선택 가능). */
-export async function openCsvFilePicker(): Promise<PickedFile[]> {
+/** 구글 피커를 열어서 사용자가 드라이브의 파일을 직접 선택하게 한다 (여러 개 선택 가능).
+ *  mimeTypes는 콤마로 구분한 문자열(Google Picker DocsView.setMimeTypes 형식)을 넘긴다. */
+async function openFilePicker(mimeTypes: string): Promise<PickedFile[]> {
   // 피커를 열기 전에 토큰이 만료돼 있을 수도 있으니(오래 열어둔 세션), 필요하면 조용히 갱신한다.
   const accessToken = await getFreshAccessToken();
   if (!PICKER_API_KEY) {
@@ -64,7 +65,7 @@ export async function openCsvFilePicker(): Promise<PickedFile[]> {
   return new Promise((resolve, reject) => {
     try {
       const view = new picker.DocsView(picker.ViewId.DOCS)
-        .setMimeTypes('text/csv')
+        .setMimeTypes(mimeTypes)
         .setSelectFolderEnabled(false);
 
       const instance = new picker.PickerBuilder()
@@ -87,4 +88,14 @@ export async function openCsvFilePicker(): Promise<PickedFile[]> {
       reject(e instanceof Error ? e : new Error('Google Picker를 여는 데 실패했습니다.'));
     }
   });
+}
+
+/** 드라이브의 CSV(단어장) 파일을 직접 선택하게 한다. */
+export function openCsvFilePicker(): Promise<PickedFile[]> {
+  return openFilePicker('text/csv');
+}
+
+/** 드라이브의 마크다운/텍스트(문법 노트) 파일을 직접 선택하게 한다. */
+export function openMarkdownFilePicker(): Promise<PickedFile[]> {
+  return openFilePicker('text/markdown,text/plain');
 }

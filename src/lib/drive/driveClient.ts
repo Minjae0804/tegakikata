@@ -1,11 +1,13 @@
 // Google Drive API 연동 레이어
 // - Google Identity Services(GIS)로 OAuth 액세스 토큰 발급 (index.html에서 스크립트 로드)
-// - /TegakikataApp/ 폴더 및 하위 파일(config.json, grammar.md, wordbanks/, saves/progress.json) 접근
+// - /TegakikataApp/ 폴더 및 하위 파일(config.json, wordbanks/, grammar/, saves/progress-*.json) 접근
 // - drive.file 스코프 사용 (앱이 생성/선택한 파일만 접근 가능)
 
 const DRIVE_SCOPE = 'https://www.googleapis.com/auth/drive.file';
 const ROOT_FOLDER_NAME = 'TegakikataApp';
-const SUBFOLDERS = ['wordbanks', 'saves'] as const;
+// grammar/는 wordbanks/처럼 여러 파일을 폴더 하나에 모아두는 구조 — 문법 포인트를 주제별로
+// 파일 여러 개로 나눠 관리하고, 게임에서 그중 원하는 파일만 골라 AI 컨텍스트로 쓸 수 있다.
+const SUBFOLDERS = ['wordbanks', 'saves', 'grammar'] as const;
 
 const FOLDER_ID_CACHE_KEY = 'tegakikata:driveFolderIds';
 
@@ -24,14 +26,21 @@ async function throwDriveError(res: Response, label: string): Promise<never> {
 
 const DEFAULT_FILES: Record<string, string> = {
   'config.json': JSON.stringify({ aiProvider: 'claude', geminiApiKey: '', claudeApiKey: '' }, null, 2),
-  'grammar.md':
+  // 예전엔 grammar.md 파일 하나뿐이었다 — 이제 grammar/ 폴더 안에 파일 여러 개를 둘 수 있고,
+  // 온보딩 때는 그 폴더 안에 기본 파일 하나만 만들어둔다. 예전 grammar.md를 쓰던 사용자는
+  // 드라이브에서 그 파일을 grammar/ 폴더 안으로 옮기기만 하면 그대로 이어서 쓸 수 있다.
+  'grammar/N5 문법.md':
     '# 문법 노트\n\n' +
-    '여기에 정리해둔 문법 포인트를 적어두면, 예문/문제를 생성할 때 AI가 참고합니다.\n' +
-    '형식은 자유롭습니다. 예:\n\n' +
+    '여기에 정리해둔 문법 포인트를 적어두면, 예문/문제를 생성하거나 단어장 맞추기의 "AI 활용형\n' +
+    '출제"를 쓸 때 AI가 참고합니다. 형식은 자유롭습니다. 예:\n\n' +
     '## N5\n' +
     '- 〜てください: 부드러운 요청/지시\n' +
-    '- 〜ましょう: 권유\n',
-  'saves/progress.json': JSON.stringify({ w: {} }, null, 2),
+    '- 〜ましょう: 권유\n' +
+    '- 〜すぎる: 너무 ~하다 (동사 ます형 + すぎる)\n' +
+    '- 〜たい: ~하고 싶다 (동사 ます형 + たい)\n',
+  // saves/ 아래 진도 파일은 더 이상 여기서 미리 만들지 않는다 — 단어장별로
+  // saves/progress-<단어장 이름>.json이 따로 있고(hooks/useProgress.ts), 처음 그 단어장으로
+  // 뭔가를 풀어서 저장될 때 없으면 자동으로 생긴다.
 };
 
 let accessToken: string | null = null;
@@ -49,6 +58,7 @@ interface FolderIdCache {
   root: string;
   wordbanks: string;
   saves: string;
+  grammar: string;
 }
 
 // ── 인증 ─────────────────────────────────────────────
@@ -143,12 +153,22 @@ export async function initDriveAuth(): Promise<void> {
  * 구글 세션 만료, 동의 철회 등) 조용히 false만 반환한다 — 그러면 화면은 기존처럼 "다시 연결"
  * 버튼을 보여주면 된다.
  */
+// 조용한 복원은 보통 1초 안팎(혹은 그보다 훨씬 빨리)이면 성공/실패가 갈린다. 드물게 iframe이
+// 응답을 안 주는 등 이보다 오래 걸리는 경우, 화면을 무한정 "확인하는 중..."으로 붙잡아두지 않고
+// 그냥 실패로 치고 "다시 연결" 버튼을 보여준다 — 사용자가 직접 눌러서 재시도하는 게 계속
+// 기다리는 것보다 낫다.
+const RESTORE_TIMEOUT_MS = 3000;
+
 export async function tryRestoreDriveAuth(): Promise<boolean> {
   if (!GOOGLE_CLIENT_ID || !readFolderIdCache()) return false;
   try {
     await waitForGoogleIdentityServices();
-    await requestToken('');
-    return true;
+    const timedOut = Symbol('timeout');
+    const result = await Promise.race([
+      requestToken('').then(() => true),
+      new Promise<typeof timedOut>((resolve) => setTimeout(() => resolve(timedOut), RESTORE_TIMEOUT_MS)),
+    ]);
+    return result === true;
   } catch {
     return false;
   }
@@ -319,7 +339,9 @@ function writeFolderIdCache(cache: FolderIdCache): void {
  */
 export async function ensureAppFolderStructure(): Promise<FolderIdCache> {
   const cached = readFolderIdCache();
-  if (cached) return cached;
+  // grammar 필드가 없으면 이 필드가 생기기 전(예전 버전)에 저장된 캐시라는 뜻이므로 무시하고
+  // 다시 탐색한다 — 새 캐시가 저장되고 나면 다음부터는 이 재탐색이 다시 일어나지 않는다.
+  if (cached?.grammar) return cached;
 
   let rootId = await findRootFolder(ROOT_FOLDER_NAME);
   if (!rootId) rootId = await createFolder(ROOT_FOLDER_NAME);
@@ -331,7 +353,12 @@ export async function ensureAppFolderStructure(): Promise<FolderIdCache> {
     subfolderIds[sub] = id;
   }
 
-  const cache: FolderIdCache = { root: rootId, wordbanks: subfolderIds.wordbanks, saves: subfolderIds.saves };
+  const cache: FolderIdCache = {
+    root: rootId,
+    wordbanks: subfolderIds.wordbanks,
+    saves: subfolderIds.saves,
+    grammar: subfolderIds.grammar,
+  };
   writeFolderIdCache(cache);
 
   // 기본 파일 생성 (이미 있으면 건너뜀)
@@ -350,6 +377,9 @@ function resolveParent(path: string, cache: FolderIdCache): { parentId: string; 
   }
   if (path.startsWith('wordbanks/')) {
     return { parentId: cache.wordbanks, fileName: path.slice('wordbanks/'.length) };
+  }
+  if (path.startsWith('grammar/')) {
+    return { parentId: cache.grammar, fileName: path.slice('grammar/'.length) };
   }
   return { parentId: cache.root, fileName: path };
 }
@@ -413,5 +443,39 @@ export async function getWordBankRootFolderId(): Promise<string> {
 
 /** 파일 ID로 CSV 파일의 원본 텍스트를 직접 읽는다 (이름으로 재검색하지 않아 더 빠르다). */
 export async function readWordBankFileById(fileId: string): Promise<string> {
+  return getFileContent(fileId);
+}
+
+// ── 문법 노트(grammar/ 폴더) ─────────────────────────────
+// wordbanks/와 동일한 구조 — grammar/ 안에 하위 폴더를 자유롭게 만들 수 있고, 사용자는
+// 하위 폴더 -> 그 안의 .md 파일 순서로 탐색해서 AI 컨텍스트로 쓸 파일을 직접 고른다.
+
+/** 주어진 폴더 바로 아래에 있는 하위 폴더 목록을 가져온다. (grammar/ 루트 폴더 ID를 넘기면 grammar/ 안의 폴더들) */
+export async function listGrammarFolders(parentFolderId?: string): Promise<{ id: string; name: string }[]> {
+  const cache = await ensureAppFolderStructure();
+  const targetId = parentFolderId ?? cache.grammar;
+  const q = encodeURIComponent(`'${targetId}' in parents and trashed=false and mimeType='${FOLDER_MIME}'`);
+  const res = await driveFetch(`https://www.googleapis.com/drive/v3/files?q=${q}&fields=files(id,name)`);
+  if (!res.ok) await throwDriveError(res, 'Drive 폴더 목록 조회 실패');
+  const data = (await res.json()) as { files: { id: string; name: string }[] };
+  return data.files;
+}
+
+/** 주어진 폴더 바로 아래에 있는 .md 파일 목록을 가져온다. (하위 폴더는 포함하지 않음) */
+export async function listGrammarFiles(parentFolderId?: string): Promise<{ id: string; name: string }[]> {
+  const cache = await ensureAppFolderStructure();
+  const targetId = parentFolderId ?? cache.grammar;
+  const files = await listFolderFiles(targetId);
+  return files.filter((f) => f.name.endsWith('.md') || f.name.endsWith('.txt'));
+}
+
+/** grammar/ 루트 폴더의 ID를 가져온다 (탐색을 시작할 기준점). */
+export async function getGrammarRootFolderId(): Promise<string> {
+  const cache = await ensureAppFolderStructure();
+  return cache.grammar;
+}
+
+/** 파일 ID로 문법 노트 파일의 원본 텍스트를 직접 읽는다 (이름으로 재검색하지 않아 더 빠르다). */
+export async function readGrammarFileById(fileId: string): Promise<string> {
   return getFileContent(fileId);
 }

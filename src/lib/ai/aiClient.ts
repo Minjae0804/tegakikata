@@ -3,7 +3,14 @@
 // (2026-08 기준 Gemini 쪽 프로젝트 접근 이슈로 Claude를 기본값으로 쓰는 중 — 문제가 풀리면
 //  config.aiProvider를 'gemini'로 바꾸기만 하면 원상복구됨)
 
-import type { AppConfig, FillBlankQuestion, TranslateGradeResult, WordEntry, WordRecallGradeResult } from '../../types';
+import type {
+  AppConfig,
+  FillBlankQuestion,
+  TranslateGradeResult,
+  WordEntry,
+  WordRecallGradeResult,
+  WordVariation,
+} from '../../types';
 import * as gemini from '../gemini/geminiClient';
 import * as claude from '../claude/claudeClient';
 
@@ -70,6 +77,18 @@ export async function gradeWordRecall(
   return config.aiProvider === 'gemini'
     ? gemini.gradeWordRecall(apiKey, word, userReading, userMeaning, model)
     : claude.gradeWordRecall(apiKey, word, userReading, userMeaning, model);
+}
+
+export async function generateWordVariation(
+  config: AppConfig,
+  word: WordEntry,
+  grammarNotes: string
+): Promise<WordVariation> {
+  const apiKey = resolveApiKey(config);
+  const model = resolveModel(config);
+  return config.aiProvider === 'gemini'
+    ? gemini.generateWordVariation(apiKey, word, grammarNotes, model)
+    : claude.generateWordVariation(apiKey, word, grammarNotes, model);
 }
 
 /** 현재 설정에 필요한 API 키가 채워져 있는지 확인한다. */

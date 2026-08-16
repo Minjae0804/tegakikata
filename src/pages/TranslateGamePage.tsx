@@ -8,7 +8,7 @@ import { FeedbackBanner } from '../components/common/FeedbackBanner';
 import { ProgressStat } from '../components/common/ProgressStat';
 import { KanaInputPanel, type KanaInputMode } from '../components/game/fill-blank/KanaInputPanel';
 import { useAppConfig } from '../hooks/useAppConfig';
-import { useGrammarNotes } from '../hooks/useGrammarNotes';
+import { useGrammarBank } from '../hooks/useGrammarBank';
 import type { WordBankController } from '../hooks/useWordBank';
 import type { ProgressController } from '../hooks/useProgress';
 import { WordBankPicker } from '../components/wordbank/WordBankPicker';
@@ -33,7 +33,7 @@ function randomWordCount(available: number): number {
 
 export function TranslateGamePage({ progress, wordBank, onExit }: TranslateGamePageProps) {
   const { config } = useAppConfig(true);
-  const { notes: grammarNotes } = useGrammarNotes(true);
+  const { notes: grammarNotes } = useGrammarBank(true);
 
   const [pickerOpen, setPickerOpen] = useState(false);
   const [wordIndex, setWordIndex] = useState(0);

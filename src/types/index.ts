@@ -91,3 +91,15 @@ export interface WordRecallGradeResult {
   meaningCorrect: boolean;
   feedback: string;
 }
+
+/**
+ * 단어장 맞추기의 "AI 활용형 출제" — 사전형(word) 대신 AI가 자연스러운 활용/파생형을 하나
+ * 만들어서 그걸로 문제를 낸다(飲む → 飲みすぎる, 食べる → 食べたい 등). 문법 노트를 참고해서
+ * 만들기 때문에, 사용자가 지금 배우고 있는 문형 위주로 나오게 할 수 있다.
+ */
+export interface WordVariation {
+  kanji: string; // 활용된 한자 표기(한자가 없는 단어는 활용된 읽기와 동일한 값)
+  reading: string; // 활용된 읽기(히라가나)
+  meaning: string; // 활용형의 한국어 뜻
+  note: string; // 어떤 문형을 썼는지 짧은 설명 (예: "-すぎる (너무 ~하다)")
+}

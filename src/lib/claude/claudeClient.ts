@@ -3,7 +3,7 @@
 // API 키는 드라이브 config.json에서 로드된 값을 호출부에서 인자로 전달받아 사용한다.
 
 import Anthropic from '@anthropic-ai/sdk';
-import type { FillBlankQuestion, TranslateGradeResult, WordEntry, WordRecallGradeResult } from '../../types';
+import type { FillBlankQuestion, TranslateGradeResult, WordEntry, WordRecallGradeResult, WordVariation } from '../../types';
 
 // 기본 모델명. 사용자가 온보딩에서 직접 모델을 지정하면(config.claudeModel) 그 값을 대신 쓴다.
 // Haiku는 Sonnet/Opus보다 훨씬 저렴하고 빨라서, 예문 생성/채점처럼 가벼운 작업엔 충분하다.
@@ -272,4 +272,48 @@ ${word.kanji.trim() ? `한자: ${word.kanji}` : '이 단어는 한자 표기가 
   };
 
   return generateStructured<WordRecallGradeResult>(apiKey, prompt, schema, model);
+}
+
+/**
+ * 단어장 맞추기의 "AI 활용형 출제"용 — 사전형(word) 대신 자연스러운 활용/파생형을 하나 만든다
+ * (飲む → 飲みすぎる, 食べる → 食べたい 등). grammarNotes(사용자가 grammar/ 폴더에서 고른 문법
+ * 노트)를 참고해서, 거기 나온 문형이 이 단어에 적용 가능하면 그걸 우선 쓴다.
+ */
+export async function generateWordVariation(
+  apiKey: string,
+  word: WordEntry,
+  grammarNotes: string,
+  model?: string
+): Promise<WordVariation> {
+  const wordHasKanji = word.kanji.trim() !== '';
+  const prompt = `당신은 일본어 학습 앱의 문제 출제자입니다.
+아래 사전형 단어를 자연스러운 활용형/파생형 하나로 바꿔주세요 — 예: 飲む → 飲みすぎる(-すぎる),
+食べる → 食べたい(-たい), 高い → 高くなかった(과거부정형) 등.
+
+사전형 단어: ${wordHasKanji ? `${word.kanji}(${word.reading})` : word.reading} — 뜻: ${word.meaning}
+${grammarNotes ? `학습자가 지금 공부 중인 문법 노트(가능하면 여기 나온 문형을 우선 활용):\n${grammarNotes}` : '학습자 문법 노트 없음 — 흔한 활용형(ます형/て형/たい형/ない형/た형/가능형/의지형/〜すぎる/〜てみる 등) 중 자연스러운 걸 고를 것'}
+
+요구사항:
+- kanji: 활용된 형태의 한자 표기. ${wordHasKanji ? '반드시 원래 단어의 한자를 포함해서 자연스러운 오쿠리가나로 적을 것(예: 食べたい, 飲みすぎる)' : '이 단어는 한자 표기가 없는 단어이니 반드시 빈 문자열("")로 둘 것'}
+- reading: 활용된 형태 전체의 읽기(히라가나)
+- meaning: 그 활용형의 한국어 뜻 (예: "먹고 싶다", "너무 마시다")
+- note: 어떤 문형을 썼는지 아주 짧은 한국어 설명 (예: "-たい (~하고 싶다)")
+- 이 단어의 품사상 자연스럽게 활용이 안 되는 경우(순수 명사 등)에는 원형을 그대로 두고
+  note에 "활용 없음"이라고 적을 것
+- 결과 문자열에 사전형 원문이 아니라 반드시 활용된 형태가 들어가야 함`;
+
+  const schema = {
+    properties: {
+      kanji: { type: 'string' },
+      reading: { type: 'string' },
+      meaning: { type: 'string' },
+      note: { type: 'string' },
+    },
+    required: ['kanji', 'reading', 'meaning', 'note'],
+  };
+
+  const result = await generateStructured<WordVariation>(apiKey, prompt, schema, model);
+  // 한자 없는 단어는 활용형도 한자가 생기면 안 된다(단어장 전체의 "한자 없는 단어" 규칙과
+  // 일관성을 맞추기 위해) — AI가 실수로 채워도 여기서 강제로 비운다.
+  return wordHasKanji ? result : { ...result, kanji: '' };
 }
