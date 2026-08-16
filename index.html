@@ -5,6 +5,14 @@
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>테가키카타 · Tegakikata</title>
+
+    <!-- 모바일 "홈 화면에 추가" 설치(PWA) 관련 태그. manifest.webmanifest 자체는
+         vite-plugin-pwa가 빌드 시 자동으로 주입한다(vite.config.ts 참고). -->
+    <meta name="theme-color" content="#f2efe3" />
+    <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <meta name="apple-mobile-web-app-title" content="테가키카타" />
   </head>
   <body>
     <div id="root"></div>
