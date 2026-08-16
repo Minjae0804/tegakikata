@@ -355,6 +355,8 @@ export function WordBankGamePage({ progress, onExit }: WordBankGamePageProps) {
 
               {submitted && (
                 <div className="flex flex-col items-center gap-3">
+                  {/* 정답을 먼저, 크고 또렷하게 — 그 아래에 채점 피드백. */}
+                  <WordCard word={word} crosshair={false} size="lg" label="정답" />
                   <FeedbackBanner
                     status={isKanjiCorrect ? 'correct' : 'incorrect'}
                     message={
@@ -365,8 +367,6 @@ export function WordBankGamePage({ progress, onExit }: WordBankGamePageProps) {
                           : `아쉬워요. (입력한 답: 「${enteredText}」) 이 단어는 단어장 학습에서 최우선으로 다시 나와요.`
                     }
                   />
-                  {/* 작은 글자로는 한자가 잘 안 보여서, 단어장 카드와 같은 크기로 정답을 보여준다. */}
-                  <WordCard word={word} />
                   <Button variant="primary" onClick={handleNext}>
                     다음 문제
                   </Button>
@@ -449,9 +449,9 @@ export function WordBankGamePage({ progress, onExit }: WordBankGamePageProps) {
                   const recallCorrect = (wordHasKanji ? recallResult.readingCorrect : true) && recallResult.meaningCorrect;
                   return (
                     <div className="flex flex-col items-center gap-3">
+                      {/* 정답을 먼저, 크고 또렷하게 — 그 아래에 채점 피드백. */}
+                      <WordCard word={word} crosshair={false} size="lg" label="정답" />
                       <FeedbackBanner status={recallCorrect ? 'correct' : 'incorrect'} message={recallResult.feedback} />
-                      {/* 작은 글자로는 읽기·한자가 잘 안 보여서, 단어장 카드와 같은 크기로 정답을 보여준다. */}
-                      <WordCard word={word} />
                       {!recallCorrect && (
                         <p className="font-body text-xs text-base-content/50">
                           이 단어는 단어장 학습에서 최우선으로 다시 나와요.

@@ -274,6 +274,8 @@ export function FillBlankGamePage({ progress, onExit }: FillBlankGamePageProps) 
 
           {submitted && (
             <div className="flex flex-col items-center gap-3">
+              {/* 정답을 먼저, 크고 또렷하게 — 그 아래에 채점 피드백. */}
+              <WordCard word={question.targetWord} crosshair={false} size="lg" label="정답" />
               <FeedbackBanner
                 status={isCorrect ? 'correct' : 'incorrect'}
                 message={
@@ -284,8 +286,6 @@ export function FillBlankGamePage({ progress, onExit }: FillBlankGamePageProps) 
                       : `아쉬워요. (입력한 답: 「${enteredText}」) 이 단어는 단어장 학습에서 최우선으로 다시 나와요.`
                 }
               />
-              {/* 작은 글자로는 한자가 잘 안 보여서, 단어장 카드와 같은 크기로 정답을 보여준다. */}
-              <WordCard word={question.targetWord} />
               {question.translation && (
                 <p className="font-body text-xs text-base-content/50">문장 해석: {question.translation}</p>
               )}
