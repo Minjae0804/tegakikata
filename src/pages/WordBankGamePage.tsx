@@ -82,6 +82,11 @@ export function WordBankGamePage({ progress, onExit }: WordBankGamePageProps) {
   // 채점에서 제외한다 — 그런 문자가 정답에 섞여 있으면 영영 못 맞히게 되는 걸 막기 위함.
   const isKanjiCorrect =
     submitted && !dontKnow && word !== null && normalizeForMatch(enteredText) === normalizeForMatch(kanjiTarget);
+  // 같은 단어를 아직 안 풀었는데 방향만 바꿔버리면, "한자 → 읽기·뜻" 쪽 프롬프트가 한자를 그대로
+  // 보여주므로 "뜻·읽기 → 한자" 문제의 정답을 미리 봐버리는 커닝이 된다. 그래서 답을 내기 전엔
+  // 방향 전환 자체를 막는다 — 방향별로 "이미 답했는지"를 따로 봐야 한다(toKanji=submitted,
+  // toReading=recallResult 있음).
+  const answeredInCurrentDirection = direction === 'toKanji' ? submitted : recallResult !== null;
 
   // 새 단어가 오면 "뜻·읽기 → 한자" 입력 모드를 그 단어에 맞게 맞춰준다 — 한자가 없는 단어면
   // 한자 필기는 애초에 쓸 데가 없으니 히라가나 입력으로 기본값을 바꾼다.
@@ -104,7 +109,7 @@ export function WordBankGamePage({ progress, onExit }: WordBankGamePageProps) {
   };
 
   const handleDirectionChange = (next: Direction) => {
-    if (next === direction) return;
+    if (next === direction || !answeredInCurrentDirection) return;
     setDirection(next);
     setLastOutcome(null);
     resetToKanjiInput();
@@ -228,7 +233,13 @@ export function WordBankGamePage({ progress, onExit }: WordBankGamePageProps) {
           <button
             type="button"
             onClick={() => handleDirectionChange('toKanji')}
-            className={`btn btn-sm rounded-[var(--radius-field)] ${
+            disabled={!answeredInCurrentDirection && direction !== 'toKanji'}
+            title={
+              !answeredInCurrentDirection && direction !== 'toKanji'
+                ? '문제를 다 풀기 전엔 방향을 바꿀 수 없어요 (반대쪽 방향이 정답을 먼저 보여줘요)'
+                : undefined
+            }
+            className={`btn btn-sm rounded-[var(--radius-field)] disabled:opacity-40 ${
               direction === 'toKanji' ? 'btn-primary' : 'btn-outline'
             }`}
           >
@@ -237,7 +248,13 @@ export function WordBankGamePage({ progress, onExit }: WordBankGamePageProps) {
           <button
             type="button"
             onClick={() => handleDirectionChange('toReading')}
-            className={`btn btn-sm rounded-[var(--radius-field)] ${
+            disabled={!answeredInCurrentDirection && direction !== 'toReading'}
+            title={
+              !answeredInCurrentDirection && direction !== 'toReading'
+                ? '문제를 다 풀기 전엔 방향을 바꿀 수 없어요 (반대쪽 방향이 정답을 먼저 보여줘요)'
+                : undefined
+            }
+            className={`btn btn-sm rounded-[var(--radius-field)] disabled:opacity-40 ${
               direction === 'toReading' ? 'btn-primary' : 'btn-outline'
             }`}
           >
@@ -367,6 +384,7 @@ export function WordBankGamePage({ progress, onExit }: WordBankGamePageProps) {
                           : `아쉬워요. (입력한 답: 「${enteredText}」) 이 단어는 단어장 학습에서 최우선으로 다시 나와요.`
                     }
                   />
+                  {!isKanjiCorrect && <PracticeWriting key={`${word.id}-toKanji`} word={word} />}
                   <Button variant="primary" onClick={handleNext}>
                     다음 문제
                   </Button>
@@ -453,9 +471,12 @@ export function WordBankGamePage({ progress, onExit }: WordBankGamePageProps) {
                       <WordCard word={word} crosshair={false} size="lg" label="정답" />
                       <FeedbackBanner status={recallCorrect ? 'correct' : 'incorrect'} message={recallResult.feedback} />
                       {!recallCorrect && (
-                        <p className="font-body text-xs text-base-content/50">
-                          이 단어는 단어장 학습에서 최우선으로 다시 나와요.
-                        </p>
+                        <>
+                          <p className="font-body text-xs text-base-content/50">
+                            이 단어는 단어장 학습에서 최우선으로 다시 나와요.
+                          </p>
+                          <PracticeWriting key={`${word.id}-toReading`} word={word} />
+                        </>
                       )}
                       <Button variant="primary" onClick={handleNext}>
                         다음 문제
@@ -466,6 +487,57 @@ export function WordBankGamePage({ progress, onExit }: WordBankGamePageProps) {
             </>
           )}
         </>
+      )}
+    </div>
+  );
+}
+
+/**
+ * 오답이었을 때만 보여주는, 채점하지 않는 손글씨 연습(기본은 접힘) — 주기능이 아니라서 접었다
+ * 펼치는 형태로 둔다. WordBankStudyPage의 "손으로 써보기"와 동일한 패턴. 부모 쪽에서 문제가
+ * 바뀔 때마다 다른 key를 줘서 이 컴포넌트를 새로 마운트시키므로, 여기서는 별도로 리셋 로직을
+ * 두지 않고 useState 초기값만 신경 쓰면 된다.
+ */
+function PracticeWriting({ word }: { word: WordEntry }) {
+  const wordHasKanji = hasKanji(word);
+  const [open, setOpen] = useState(false);
+  const [inputMode, setInputMode] = useState<KanaInputMode>(wordHasKanji ? 'kanji' : 'hiragana');
+  const [chars, setChars] = useState<string[]>([]);
+
+  return (
+    <div className="flex w-full max-w-sm flex-col items-center gap-3">
+      <Button variant="ghost" size="sm" onClick={() => setOpen((v) => !v)}>
+        {open ? '손으로 써보기 닫기' : '✏️ 이 단어 손으로 써보기'}
+      </Button>
+
+      {open && (
+        <div className="flex flex-col items-center gap-3 rounded-[var(--radius-box)] border border-base-300 bg-base-100 p-4">
+          <div className="flex min-h-11 items-center gap-1 rounded-[var(--radius-field)] border-2 border-base-300 bg-base-100 px-3 py-1.5">
+            {chars.length === 0 ? (
+              <span className="font-body text-xs text-base-content/30 select-none">
+                연습 삼아 「{wordHasKanji ? word.kanji : word.reading}」를 써보세요
+              </span>
+            ) : (
+              chars.map((char, i) => (
+                <span key={i} className="font-jp text-xl text-base-content">
+                  {char}
+                </span>
+              ))
+            )}
+          </div>
+          {chars.length > 0 && (
+            <Button variant="ghost" size="sm" onClick={() => setChars([])}>
+              연습 지우고 다시
+            </Button>
+          )}
+
+          <KanaInputPanel
+            mode={inputMode}
+            onModeChange={setInputMode}
+            onSelect={(c) => setChars((prev) => [...prev, c])}
+            modes={wordHasKanji ? undefined : ['hiragana', 'katakana']}
+          />
+        </div>
       )}
     </div>
   );
