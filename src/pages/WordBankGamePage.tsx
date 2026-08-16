@@ -2,8 +2,9 @@
 // 단어장(useWordBank)에 있는 단어만으로 출제한다. 두 방향을 지원한다.
 //  - "뜻·읽기 → 한자": 뜻과 읽기를 보고 한자를 필기로 쓴다. AI 미사용 — 단어장 데이터와
 //    글자 그대로 비교해서 채점한다.
-//  - "한자 → 읽기·뜻": 한자만 보고 읽기(히라가나)와 뜻(한국어)을 답한다. 오탈자/동의어처럼
-//    유연하게 봐줘야 하는 채점이라 AI(Gemini/Claude)로 채점한다.
+//  - "한자 → 읽기·뜻": 한자만 보고 읽기(히라가나)와 뜻(한국어)을 답한다. AI 채점은 토글이다 —
+//    켜면 오탈자/동의어까지 유연하게 봐주는 AI(Gemini/Claude) 채점, 끄면(또는 AI 키가 없으면)
+//    단어장 데이터와 정확히 일치하는지만 보는 로컬 채점.
 //
 // 출제 순서는 단어장 학습(안키)과 동일하게 우선순위(SRS) 기반이다 — pickDueWords()로 급한
 // 단어부터 정렬한 큐를 만들어 순서대로 보여준다. 맞히면 그 단어는 큐에서 빠지고(다음 복습
@@ -93,19 +94,8 @@ export function WordBankGamePage({ progress, onExit }: WordBankGamePageProps) {
   // 채점에서 제외한다 — 그런 문자가 정답에 섞여 있으면 영영 못 맞히게 되는 걸 막기 위함.
   const isKanjiCorrect =
     submitted && !dontKnow && word !== null && normalizeForMatch(enteredText) === normalizeForMatch(kanjiTarget);
-  // 같은 단어를 아직 안 풀었는데 방향만 바꿔버리면, "한자 → 읽기·뜻" 쪽 프롬프트가 한자를 그대로
-  // 보여주므로 "뜻·읽기 → 한자" 문제의 정답을 미리 봐버리는 커닝이 된다. 그래서 답을 내기 전엔
-  // 방향 전환 자체를 막는다 — 방향별로 "이미 답했는지"를 따로 봐야 한다(toKanji=submitted,
-  // toReading=recallResult 있음).
-  const answeredInCurrentDirection = direction === 'toKanji' ? submitted : recallResult !== null;
-  // 로컬(비AI) 채점은 "읽기만" 정확히 일치하는지 볼 수 있는 게 전부라, 이미 프롬프트로
-  // 읽기를 보여주는 한자 없는 단어에서는 의미가 없다 — 그런 단어는 AI를 못 쓰면 이 방향에서
-  // 뜻을 채점할 방법이 아예 없다는 뜻이다.
-  const canGradeReadingLocally = wordHasKanji;
-  // AI 키가 없으면(aiAvailable=false) 토글과 상관없이 항상 꺼진다. AI가 있는데 사용자가 토글을
-  // 꺼도, 한자 없는 단어는 로컬 채점이 불가능하니 그럴 땐 AI를 계속 쓴다(막힌 화면 대신).
-  const effectiveUseAi = aiAvailable && (useAiGrading || !canGradeReadingLocally);
-  const readingDirectionBlocked = direction === 'toReading' && !effectiveUseAi && !canGradeReadingLocally;
+  // AI 키가 없으면(aiAvailable=false) 토글과 상관없이 항상 꺼진다.
+  const effectiveUseAi = aiAvailable && useAiGrading;
 
   // 새 단어가 오면 "뜻·읽기 → 한자" 입력 모드를 그 단어에 맞게 맞춰준다 — 한자가 없는 단어면
   // 한자 필기는 애초에 쓸 데가 없으니 히라가나 입력으로 기본값을 바꾼다.
@@ -128,7 +118,7 @@ export function WordBankGamePage({ progress, onExit }: WordBankGamePageProps) {
   };
 
   const handleDirectionChange = (next: Direction) => {
-    if (next === direction || !answeredInCurrentDirection) return;
+    if (next === direction) return;
     setDirection(next);
     setLastOutcome(null);
     resetToKanjiInput();
@@ -216,13 +206,17 @@ export function WordBankGamePage({ progress, onExit }: WordBankGamePageProps) {
   };
 
   /**
-   * "한자 → 읽기·뜻" 채점 — AI 미사용, 읽기만 정확히 일치하는지 비교한다. 뜻은 AI 없이는
-   * 표현이 달라도 맞는지 유연하게 볼 방법이 없어서 아예 묻지 않고 정답 카드로만 공개한다
-   * (자기신고에 의존해 "맞다"고 스스로 채점하게 두지 않기 위해).
+   * "한자 → 읽기·뜻" 채점 — AI 미사용, 단어장 데이터와 정확히 일치하는지만 본다(오탈자/동의어는
+   * 못 봐주지만, 그 대신 AI 없이도 객관적으로 채점할 수 있다). 한자 없는 단어는 읽기가 이미
+   * 프롬프트로 나와 있으니 뜻만 채점한다.
    */
   const handleGradeReadingLocal = () => {
-    if (!word || readingText.trim() === '') return;
-    const correct = normalizeForMatch(readingText) === normalizeForMatch(word.reading);
+    if (!word) return;
+    if (wordHasKanji && readingText.trim() === '') return;
+    if (meaningAnswer.trim() === '') return;
+    const readingCorrect = wordHasKanji ? normalizeForMatch(readingText) === normalizeForMatch(word.reading) : true;
+    const meaningCorrect = meaningAnswer.trim() === word.meaning.trim();
+    const correct = readingCorrect && meaningCorrect;
     setAnsweredCount((n) => n + 1);
     setLastOutcome(correct ? 'correct' : 'missed');
     if (correct) {
@@ -232,9 +226,9 @@ export function WordBankGamePage({ progress, onExit }: WordBankGamePageProps) {
       progress.recordMiss(skillKey(word.id, 'reading'));
     }
     setRecallResult({
-      readingCorrect: correct,
-      meaningCorrect: true, // AI 없이는 뜻을 채점하지 않는다 — 오답 취급하지 않으려고 true로 둔다.
-      feedback: correct ? '정답이에요!' : `아쉬워요, 정답 읽기는 「${word.reading}」예요.`,
+      readingCorrect,
+      meaningCorrect,
+      feedback: correct ? '정답이에요!' : '아쉬워요, 정답을 확인해보세요.',
     });
   };
 
@@ -271,16 +265,12 @@ export function WordBankGamePage({ progress, onExit }: WordBankGamePageProps) {
         <ProgressStat label="맞은 문제" value={correctCount} suffix={`/${answeredCount}`} />
         {word?.jlptLevel && <ProgressStat label="JLPT" value={word.jlptLevel} />}
         <div className="flex gap-2">
+          {/* 두 방향의 출제 큐가 스킬별로 따로 정렬돼 있어서(dueScoreBySkill), 방향을 바꾸면 보통
+              다른 단어로 넘어간다 — 그래서 아무 때나 자유롭게 전환할 수 있게 열어둔다. */}
           <button
             type="button"
             onClick={() => handleDirectionChange('toKanji')}
-            disabled={!answeredInCurrentDirection && direction !== 'toKanji'}
-            title={
-              !answeredInCurrentDirection && direction !== 'toKanji'
-                ? '문제를 다 풀기 전엔 방향을 바꿀 수 없어요 (반대쪽 방향이 정답을 먼저 보여줘요)'
-                : undefined
-            }
-            className={`btn btn-sm rounded-[var(--radius-field)] disabled:opacity-40 ${
+            className={`btn btn-sm rounded-[var(--radius-field)] ${
               direction === 'toKanji' ? 'btn-primary' : 'btn-outline'
             }`}
           >
@@ -289,13 +279,7 @@ export function WordBankGamePage({ progress, onExit }: WordBankGamePageProps) {
           <button
             type="button"
             onClick={() => handleDirectionChange('toReading')}
-            disabled={!answeredInCurrentDirection && direction !== 'toReading'}
-            title={
-              !answeredInCurrentDirection && direction !== 'toReading'
-                ? '문제를 다 풀기 전엔 방향을 바꿀 수 없어요 (반대쪽 방향이 정답을 먼저 보여줘요)'
-                : undefined
-            }
-            className={`btn btn-sm rounded-[var(--radius-field)] disabled:opacity-40 ${
+            className={`btn btn-sm rounded-[var(--radius-field)] ${
               direction === 'toReading' ? 'btn-primary' : 'btn-outline'
             }`}
           >
@@ -317,7 +301,7 @@ export function WordBankGamePage({ progress, onExit }: WordBankGamePageProps) {
             disabled={!aiAvailable}
           />
           <span className="font-body text-xs text-base-content/60">
-            AI 채점 사용{!aiAvailable && ' — AI 설정이 없어서 꺼져 있어요 (읽기만 정확히 맞혀서 채점)'}
+            AI 채점 사용{!aiAvailable && ' — AI 설정이 없어서 꺼져 있어요 (단어장과 정확히 일치해야 정답으로 채점)'}
           </span>
         </label>
       )}
@@ -354,18 +338,6 @@ export function WordBankGamePage({ progress, onExit }: WordBankGamePageProps) {
           </p>
           <Button variant="outline" size="sm" onClick={() => setPickerOpen(true)}>
             단어장 선택하기
-          </Button>
-        </div>
-      )}
-
-      {readingDirectionBlocked && (
-        <div className="flex flex-col gap-2">
-          <p className="font-body text-sm text-base-content/60">
-            이 단어는 한자가 없어서, AI 없이는 이 방향에서 뜻을 채점할 방법이 없어요. 설정에서 AI를
-            등록하거나, "뜻·읽기 → 한자" 방향으로 바꿔서 풀어보세요.
-          </p>
-          <Button variant="outline" size="sm" onClick={handleNext}>
-            다음 단어로 건너뛰기
           </Button>
         </div>
       )}
@@ -461,11 +433,10 @@ export function WordBankGamePage({ progress, onExit }: WordBankGamePageProps) {
                 <p className="font-jp text-4xl text-base-content">{wordHasKanji ? word.kanji : word.reading}</p>
               </div>
 
-              {!readingDirectionBlocked && recallResult === null && (
+              {recallResult === null && (
                 <div className="flex flex-col gap-4">
                   {/* 한자가 없는 단어는 위 카드에서 읽기를 이미 보여줬으니, 그걸 다시 받아쓰게
-                      하는 건 의미가 없어서 뜻만 물어본다(AI 모드에서만 — 로컬 채점은 애초에
-                      한자 있는 단어에서만 뜨므로 여기 해당 없음). */}
+                      하는 건 의미가 없어서 뜻만 물어본다. */}
                   {wordHasKanji && (
                     <div className="flex flex-col items-center gap-2">
                       <span className="font-body text-xs text-base-content/50">읽기 (가나) — 눌러서 직접 입력도 가능해요</span>
@@ -493,20 +464,18 @@ export function WordBankGamePage({ progress, onExit }: WordBankGamePageProps) {
                     </div>
                   )}
 
-                  {/* 뜻은 AI가 있어야만 유연하게 채점할 수 있어서, AI 미사용일 땐 아예 안 묻는다
-                      (자기신고에 기대지 않기 위해) — 대신 채점 후 정답 카드로 뜻까지 공개한다. */}
-                  {effectiveUseAi && (
-                    <label className="flex flex-col gap-1.5">
-                      <span className="font-body text-xs text-base-content/60">뜻 (한국어)</span>
-                      <textarea
-                        value={meaningAnswer}
-                        onChange={(e) => setMeaningAnswer(e.target.value)}
-                        rows={2}
-                        className="font-body textarea textarea-bordered w-full rounded-[var(--radius-field)] text-base"
-                        placeholder="뜻을 한국어로 적어보세요"
-                      />
-                    </label>
-                  )}
+                  <label className="flex flex-col gap-1.5">
+                    <span className="font-body text-xs text-base-content/60">
+                      뜻 (한국어){!effectiveUseAi && ' — 단어장과 정확히 일치해야 정답으로 처리돼요'}
+                    </span>
+                    <textarea
+                      value={meaningAnswer}
+                      onChange={(e) => setMeaningAnswer(e.target.value)}
+                      rows={2}
+                      className="font-body textarea textarea-bordered w-full rounded-[var(--radius-field)] text-base"
+                      placeholder="뜻을 한국어로 적어보세요"
+                    />
+                  </label>
 
                   {gradeError && <p className="font-body text-xs text-secondary">{gradeError}</p>}
 
@@ -518,7 +487,7 @@ export function WordBankGamePage({ progress, onExit }: WordBankGamePageProps) {
                         effectiveUseAi
                           ? grading ||
                             (wordHasKanji ? readingText.trim() === '' && meaningAnswer.trim() === '' : meaningAnswer.trim() === '')
-                          : readingText.trim() === ''
+                          : meaningAnswer.trim() === '' || (wordHasKanji && readingText.trim() === '')
                       }
                     >
                       {effectiveUseAi ? (grading ? '채점하는 중...' : '채점하기') : '제출'}
