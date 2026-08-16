@@ -61,7 +61,19 @@ export function HandwritingFrame({
   };
 
   return (
-    <div className="inline-flex items-center gap-3">
+    <div className="inline-flex flex-col items-center gap-3">
+      <div className="flex gap-2">
+        {/* 한 획 취소가 지우기보다 훨씬 자주 쓰는 동작이라, 지우기(전체 삭제)보다 더 강조한다. */}
+        <Button variant="outline" size="sm" onClick={handleUndo}>
+          한 획 취소
+        </Button>
+        <Button variant="ghost" size="sm" onClick={handleClear}>
+          지우기
+        </Button>
+        <Button variant="primary" size="sm" onClick={handleRecognize}>
+          인식하기
+        </Button>
+      </div>
       <div
         className={`genko-frame relative rounded-[var(--radius-box)] ${
           crosshair ? 'genko-frame-cross' : ''
@@ -79,20 +91,6 @@ export function HandwritingFrame({
             <span className="font-body text-xs text-base-content/30 select-none">{hint}</span>
           </span>
         )}
-      </div>
-      {/* 이 컨트롤들(한 획 취소/지우기/인식하기)을 입력창 아래가 아니라 오른쪽에 세로로 둔다 —
-          아래에 두면 화면 하단의 제출 버튼과 바로 붙어서 오작동하기 쉬웠다. */}
-      <div className="flex flex-col gap-2">
-        {/* 한 획 취소가 지우기보다 훨씬 자주 쓰는 동작이라, 지우기(전체 삭제)보다 더 강조한다. */}
-        <Button variant="outline" size="sm" onClick={handleUndo}>
-          한 획 취소
-        </Button>
-        <Button variant="ghost" size="sm" onClick={handleClear}>
-          지우기
-        </Button>
-        <Button variant="primary" size="sm" onClick={handleRecognize}>
-          인식하기
-        </Button>
       </div>
     </div>
   );
