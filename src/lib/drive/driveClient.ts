@@ -446,6 +446,16 @@ export async function readWordBankFileById(fileId: string): Promise<string> {
   return getFileContent(fileId);
 }
 
+/**
+ * 파일 ID로 CSV 파일 내용을 직접 덮어쓴다(이름으로 찾지 않고 ID로 바로) — 단어장 CSV에 학습
+ * 진도 컬럼을 다시 써넣을 때 쓴다(hooks/useProgress.ts). writeAppFile처럼 이름으로 찾는 방식은
+ * 구글 피커로 고른, wordbanks/ 폴더 밖에 있는 기존 파일에는 안 맞아서(엉뚱한 파일을 새로
+ * 만들거나 다른 파일을 덮어쓸 수 있음) ID 기반으로 확실하게 그 파일만 갱신한다.
+ */
+export async function updateWordBankFileById(fileId: string, content: string): Promise<void> {
+  await updateFileContent(fileId, content);
+}
+
 // ── 문법 노트(grammar/ 폴더) ─────────────────────────────
 // wordbanks/와 동일한 구조 — grammar/ 안에 하위 폴더를 자유롭게 만들 수 있고, 사용자는
 // 하위 폴더 -> 그 안의 .md 파일 순서로 탐색해서 AI 컨텍스트로 쓸 파일을 직접 고른다.

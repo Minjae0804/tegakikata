@@ -119,8 +119,9 @@ export function WordBankPicker({
     setUploadSuccess(null);
     try {
       const text = await file.text();
-      // 여긴 형식(필수 컬럼/유효 행)만 미리 확인하는 용도라 bankName은 실제 저장 이름을 그대로 써도 무방.
-      const entries = parseWordBankCsv(text, sanitizeBankName(file.name)); // 필수 컬럼이 없으면 여기서 에러를 던짐
+      // 여긴 형식(필수 컬럼/유효 행)만 미리 확인하는 용도라 bankName/fileId는 실제 값이 아니어도 무방
+      // (아직 드라이브에 올라가기 전이라 진짜 파일 ID가 없다 — entries는 개수만 세고 버려진다).
+      const entries = parseWordBankCsv(text, sanitizeBankName(file.name), ''); // 필수 컬럼이 없으면 여기서 에러를 던짐
       if (entries.length === 0) {
         throw new Error('유효한 단어가 하나도 없어요. kanji/reading/meaning 값이 채워진 행이 있는지 확인해주세요.');
       }

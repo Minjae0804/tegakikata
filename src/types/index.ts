@@ -5,9 +5,12 @@ export interface WordEntry {
    *  (lib/wordbank/csv.ts의 makeWordId 참고). 학습 진도도 이 id를 키로 쓰므로, 같은 단어라도
    *  단어장이 다르면 서로 다른 진도로 취급된다. */
   id: string;
-  /** 이 단어가 어느 단어장(CSV 파일)에서 왔는지 — 진도 저장 파일을 단어장별로 나누는 데 쓴다
-   *  (hooks/useProgress.ts 참고). */
+  /** 이 단어가 어느 단어장(CSV 파일)에서 왔는지 — 그 단어장 CSV 자체에 진도를 같이 저장하는 데
+   *  쓴다(hooks/useProgress.ts 참고). */
   bankName: string;
+  /** 이 단어가 온 CSV 파일의 드라이브 파일 ID — 진도를 그 파일에 다시 써넣을 때(덮어쓸 파일을
+   *  찾을 때) bankName만으로는(이름 기준 검색) 느리거나 꼬일 수 있어서 ID로 직접 쓴다. */
+  fileId: string;
   kanji: string;
   reading: string;
   meaning: string;
@@ -36,9 +39,11 @@ export interface ProgressEntry {
   nextReviewAt?: string; // 이 시각 이후로 복습 대상이 됨. 없으면(한 번도 안 풀었으면) 항상 대상
 }
 
-/** saves/progress-<단어장 이름>.json에 저장되는 압축 형태(단어장별로 파일이 따로 있음 —
- *  hooks/useProgress.ts 참고). wordId는 키로만 쓰고 값엔 안 넣고(중복 제거), 필드명도 축약해서
- *  단어 수가 많아져도 페이로드/파싱 비용이 커지지 않게 한다. */
+/** 진도 압축 형태 — 단어장 CSV의 진도 컬럼(kanji_e/iv/r/la/l/n, reading_e/iv/r/la/l/n)에 그대로
+ *  대응한다(hooks/useProgress.ts, lib/wordbank/csv.ts 참고). 예전엔 saves/progress-<단어장
+ *  이름>.json이라는 별도 파일에 이 형태로 저장했는데, 지금은 단어장 CSV 자체에 컬럼으로 저장한다 —
+ *  예전 파일이 남아있으면 최초 로드 시 한 번 병합해서 끌어온다(마이그레이션, useProgress.ts 참고).
+ *  필드명은 축약해서 단어 수가 많아져도 페이로드/파싱 비용이 커지지 않게 한다. */
 export interface StoredProgressEntry {
   e: number; // ease
   iv: number; // intervalMinutes
@@ -48,6 +53,7 @@ export interface StoredProgressEntry {
   n?: string; // nextReviewAt
 }
 
+/** 예전 saves/progress-<단어장 이름>.json 파일 형식 — 마이그레이션(1회성 병합) 읽기 전용으로만 쓴다. */
 export interface ProgressStore {
   w: Record<string, StoredProgressEntry>; // wordId -> entry
 }

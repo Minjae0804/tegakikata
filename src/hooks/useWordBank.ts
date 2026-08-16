@@ -62,7 +62,7 @@ export function useWordBank(enabled = true) {
       const parsedPerFile = await Promise.all(
         files.map(async (file) => {
           const csvText = await readWordBankFileById(file.id);
-          return parseWordBankCsv(csvText, sanitizeBankName(file.name));
+          return parseWordBankCsv(csvText, sanitizeBankName(file.name), file.id);
         })
       );
       const merged = new Map<string, WordEntry>();

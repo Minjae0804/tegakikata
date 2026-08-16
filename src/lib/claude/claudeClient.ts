@@ -153,10 +153,12 @@ export async function generateFillBlankQuestion(
   return {
     sentence: result.sentence,
     targetWord: {
-      // 단어장 없이 AI가 즉석에서 만든 단어라 소속 단어장이 없다 — "ai"라는 가상 단어장 하나로
-      // 묶어서 진도를 저장한다(그래야 매번 다른 단어마다 저장 파일이 따로 안 생긴다).
+      // 단어장 없이 AI가 즉석에서 만든 단어라 소속 단어장(따라서 진도를 되써넣을 CSV 파일도)이
+      // 없다 — 실제로 이 단어는 wordBank.words에 없어서 진도가 기록되지도 않는다(FillBlankGamePage의
+      // tracked 체크 참고). bankName/fileId는 타입만 채우는 자리표시자.
       id: `ai::${result.kanji}_${result.reading}`,
       bankName: 'ai',
+      fileId: '',
       kanji: result.kanji,
       reading: result.reading,
       meaning: result.meaning,
