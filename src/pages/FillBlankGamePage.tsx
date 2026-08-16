@@ -13,6 +13,7 @@ import { KanaInputPanel, type KanaInputMode } from '../components/game/fill-blan
 import { FeedbackBanner } from '../components/common/FeedbackBanner';
 import { ProgressStat } from '../components/common/ProgressStat';
 import { Button } from '../components/common/Button';
+import { WordCard } from '../components/common/WordCard';
 import { useAppConfig } from '../hooks/useAppConfig';
 import { useWordBank } from '../hooks/useWordBank';
 import type { ProgressController } from '../hooks/useProgress';
@@ -272,17 +273,19 @@ export function FillBlankGamePage({ progress, onExit }: FillBlankGamePageProps) 
           )}
 
           {submitted && (
-            <div className="flex flex-col gap-3">
+            <div className="flex flex-col items-center gap-3">
               <FeedbackBanner
                 status={isCorrect ? 'correct' : 'incorrect'}
                 message={
                   isCorrect
-                    ? `정답이에요. 「${targetHasKanji ? `${question.targetWord.kanji}(${question.targetWord.reading})` : question.targetWord.reading}」 — ${question.targetWord.meaning}`
+                    ? '정답이에요!'
                     : dontKnow
-                      ? `정답은 「${targetHasKanji ? `${question.targetWord.kanji}(${question.targetWord.reading})` : question.targetWord.reading}」예요 — ${question.targetWord.meaning}. 이 단어는 단어장 학습에서 최우선으로 다시 나와요.`
-                      : `아쉬워요, 정답은 「${targetHasKanji ? `${question.targetWord.kanji}(${question.targetWord.reading})` : question.targetWord.reading}」예요 — ${question.targetWord.meaning}. (입력한 답: 「${enteredText}」) 이 단어는 단어장 학습에서 최우선으로 다시 나와요.`
+                      ? '이 단어는 단어장 학습에서 최우선으로 다시 나와요.'
+                      : `아쉬워요. (입력한 답: 「${enteredText}」) 이 단어는 단어장 학습에서 최우선으로 다시 나와요.`
                 }
               />
+              {/* 작은 글자로는 한자가 잘 안 보여서, 단어장 카드와 같은 크기로 정답을 보여준다. */}
+              <WordCard word={question.targetWord} />
               {question.translation && (
                 <p className="font-body text-xs text-base-content/50">문장 해석: {question.translation}</p>
               )}
