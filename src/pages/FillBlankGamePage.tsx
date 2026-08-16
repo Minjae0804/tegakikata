@@ -36,6 +36,11 @@ interface FillBlankGamePageProps {
 export function FillBlankGamePage({ progress, wordBank, onExit }: FillBlankGamePageProps) {
   const { config } = useAppConfig(true);
   const { notes: grammarNotes } = useGrammarBank(true);
+  // 나가기 버튼을 누르면(=1분 주기 flush를 기다리지 않고) 밀린 진도를 바로 저장한 뒤 나간다.
+  const handleExit = () => {
+    void progress.flush();
+    onExit?.();
+  };
 
   const [pickerOpen, setPickerOpen] = useState(false);
 
@@ -146,7 +151,7 @@ export function FillBlankGamePage({ progress, wordBank, onExit }: FillBlankGameP
           AI API 키가 설정되지 않았어요. 온보딩에서 키를 먼저 등록해주세요.
         </p>
         {onExit && (
-          <Button variant="ghost" size="sm" onClick={onExit}>
+          <Button variant="ghost" size="sm" onClick={handleExit}>
             나가기
           </Button>
         )}
@@ -162,7 +167,7 @@ export function FillBlankGamePage({ progress, wordBank, onExit }: FillBlankGameP
           <h1 className="font-display text-xl text-base-content">한자를 필기로 채워보세요</h1>
         </div>
         {onExit && (
-          <Button variant="ghost" size="sm" onClick={onExit}>
+          <Button variant="ghost" size="sm" onClick={handleExit}>
             나가기
           </Button>
         )}

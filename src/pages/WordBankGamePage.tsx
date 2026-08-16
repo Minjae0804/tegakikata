@@ -57,6 +57,11 @@ const VARIATION_SKIP_RATE = 0.3;
 export function WordBankGamePage({ progress, wordBank, onExit }: WordBankGamePageProps) {
   const { config } = useAppConfig(true);
   const grammarBank = useGrammarBank(true);
+  // 나가기 버튼을 누르면(=1분 주기 flush를 기다리지 않고) 밀린 진도를 바로 저장한 뒤 나간다.
+  const handleExit = () => {
+    void progress.flush();
+    onExit?.();
+  };
 
   const [pickerOpen, setPickerOpen] = useState(false);
   const [grammarPickerOpen, setGrammarPickerOpen] = useState(false);
@@ -337,7 +342,7 @@ export function WordBankGamePage({ progress, wordBank, onExit }: WordBankGamePag
           <h1 className="font-display text-xl text-base-content">내 단어장으로 연습해요</h1>
         </div>
         {onExit && (
-          <Button variant="ghost" size="sm" onClick={onExit}>
+          <Button variant="ghost" size="sm" onClick={handleExit}>
             나가기
           </Button>
         )}

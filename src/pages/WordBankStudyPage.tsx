@@ -26,6 +26,11 @@ interface WordBankStudyPageProps {
 }
 
 export function WordBankStudyPage({ progress, wordBank, onExit }: WordBankStudyPageProps) {
+  // 나가기 버튼을 누르면(=1분 주기 flush를 기다리지 않고) 밀린 진도를 바로 저장한 뒤 나간다.
+  const handleExit = () => {
+    void progress.flush();
+    onExit?.();
+  };
 
   const [pickerOpen, setPickerOpen] = useState(false);
   const [studyAll, setStudyAll] = useState(false);
@@ -111,7 +116,7 @@ export function WordBankStudyPage({ progress, wordBank, onExit }: WordBankStudyP
           <h1 className="font-display text-xl text-base-content">오늘 복습할 단어</h1>
         </div>
         {onExit && (
-          <Button variant="ghost" size="sm" onClick={onExit}>
+          <Button variant="ghost" size="sm" onClick={handleExit}>
             나가기
           </Button>
         )}
