@@ -241,7 +241,12 @@ async function driveFetch(url: string, init: RequestInit = {}): Promise<Response
 async function findChild(name: string, parentId: string, mimeType?: string): Promise<string | null> {
   const mimeQuery = mimeType ? ` and mimeType='${mimeType}'` : '';
   const q = encodeURIComponent(`name='${name}' and '${parentId}' in parents and trashed=false${mimeQuery}`);
-  const res = await driveFetch(`https://www.googleapis.com/drive/v3/files?q=${q}&fields=files(id,name)`);
+  // orderBy=createdTime을 안 주면 결과 순서가 보장되지 않는다 — 혹시라도 같은 이름의 항목이
+  // 두 개 이상 있으면(과거 동시 생성 등으로) 매번 다른 걸 골라올 수 있어서, 항상 가장 먼저
+  // 만들어진(=실제 데이터가 있을 가능성이 높은) 걸 결정적으로 고른다.
+  const res = await driveFetch(
+    `https://www.googleapis.com/drive/v3/files?q=${q}&orderBy=createdTime&fields=files(id,name)`
+  );
   if (!res.ok) await throwDriveError(res, 'Drive 검색 실패');
   const data = (await res.json()) as { files: { id: string; name: string }[] };
   return data.files[0]?.id ?? null;
@@ -264,7 +269,12 @@ async function findRootFolder(name: string): Promise<string | null> {
   const q = encodeURIComponent(
     `name='${name}' and mimeType='application/vnd.google-apps.folder' and trashed=false`
   );
-  const res = await driveFetch(`https://www.googleapis.com/drive/v3/files?q=${q}&fields=files(id,name,parents)`);
+  // orderBy=createdTime 없인 결과 순서가 정해져 있지 않다 — 과거에(동시 접속 등으로) 같은
+  // 이름의 루트 폴더가 두 개 이상 생겼더라도, 매 기기/세션마다 다른 걸 고르지 않고 항상 가장
+  // 먼저 만들어진 폴더(=실제 단어장/진도가 들어있을 폴더)를 결정적으로 골라 재사용한다.
+  const res = await driveFetch(
+    `https://www.googleapis.com/drive/v3/files?q=${q}&orderBy=createdTime&fields=files(id,name,parents)`
+  );
   if (!res.ok) await throwDriveError(res, 'Drive 검색 실패');
   const data = (await res.json()) as { files: { id: string; name: string; parents?: string[] }[] };
   return data.files[0]?.id ?? null;
@@ -333,42 +343,68 @@ function writeFolderIdCache(cache: FolderIdCache): void {
   localStorage.setItem(FOLDER_ID_CACHE_KEY, JSON.stringify(cache));
 }
 
+// ensureAppFolderStructure()가 동시에 여러 번 호출되면(예: 화면 여러 곳에서 거의 동시에
+// readAppFile/writeAppFile을 부르는 경우) 각 호출이 캐시가 아직 없는 걸 보고 저마다
+// findRootFolder를 실행할 수 있다 — 그 사이 아무도 못 찾으면(폴더가 정말 처음 생기는 시점이거나,
+// 검색 결과 반영이 아직 안 됐거나) 여러 호출이 동시에 createFolder를 불러 "TegakikataApp" 루트
+// 폴더가 중복 생성될 수 있다. 그러면 기기/세션마다 어느 걸 캐싱하느냐가 갈려서, 마치 "다른
+// 기기에서는 기존 데이터를 못 찾고 새 폴더가 생기는" 것처럼 보인다. 그래서 진행 중인 호출을
+// 모듈 전역에 하나만 유지하고, 그 사이 들어온 호출은 새로 시작하지 않고 같은 결과를 기다린다.
+let ensureStructurePromise: Promise<FolderIdCache> | null = null;
+
 /**
  * /TegakikataApp/ 루트 폴더와 wordbanks/, saves/ 하위 폴더, 기본 파일들이 없으면 생성한다.
  * 폴더 ID는 localStorage에 캐싱해 재사용하고, 캐시가 없으면 이름으로 재탐색한다.
  */
-export async function ensureAppFolderStructure(): Promise<FolderIdCache> {
+export function ensureAppFolderStructure(): Promise<FolderIdCache> {
   const cached = readFolderIdCache();
   // grammar 필드가 없으면 이 필드가 생기기 전(예전 버전)에 저장된 캐시라는 뜻이므로 무시하고
   // 다시 탐색한다 — 새 캐시가 저장되고 나면 다음부터는 이 재탐색이 다시 일어나지 않는다.
-  if (cached?.grammar) return cached;
+  if (cached?.grammar) return Promise.resolve(cached);
 
-  let rootId = await findRootFolder(ROOT_FOLDER_NAME);
-  if (!rootId) rootId = await createFolder(ROOT_FOLDER_NAME);
+  if (ensureStructurePromise) return ensureStructurePromise;
 
-  const subfolderIds: Record<string, string> = {};
-  for (const sub of SUBFOLDERS) {
-    let id = await findChild(sub, rootId, 'application/vnd.google-apps.folder');
-    if (!id) id = await createFolder(sub, rootId);
-    subfolderIds[sub] = id;
-  }
+  ensureStructurePromise = (async () => {
+    try {
+      // 위에서 이미 cached?.grammar를 확인했지만, 여기 도달하는 동안 다른 동시 호출이 먼저
+      // 끝내고 캐시를 써뒀을 수 있으니 한 번 더 확인해서 중복 탐색/생성을 피한다.
+      const freshCached = readFolderIdCache();
+      if (freshCached?.grammar) return freshCached;
 
-  const cache: FolderIdCache = {
-    root: rootId,
-    wordbanks: subfolderIds.wordbanks,
-    saves: subfolderIds.saves,
-    grammar: subfolderIds.grammar,
-  };
-  writeFolderIdCache(cache);
+      let rootId = await findRootFolder(ROOT_FOLDER_NAME);
+      if (!rootId) rootId = await createFolder(ROOT_FOLDER_NAME);
 
-  // 기본 파일 생성 (이미 있으면 건너뜀)
-  for (const [path, defaultContent] of Object.entries(DEFAULT_FILES)) {
-    const { parentId, fileName } = resolveParent(path, cache);
-    const existingId = await findChild(fileName, parentId);
-    if (!existingId) await createFileWithContent(fileName, parentId, defaultContent);
-  }
+      const subfolderIds: Record<string, string> = {};
+      for (const sub of SUBFOLDERS) {
+        let id = await findChild(sub, rootId, 'application/vnd.google-apps.folder');
+        if (!id) id = await createFolder(sub, rootId);
+        subfolderIds[sub] = id;
+      }
 
-  return cache;
+      const cache: FolderIdCache = {
+        root: rootId,
+        wordbanks: subfolderIds.wordbanks,
+        saves: subfolderIds.saves,
+        grammar: subfolderIds.grammar,
+      };
+      writeFolderIdCache(cache);
+
+      // 기본 파일 생성 (이미 있으면 건너뜀)
+      for (const [path, defaultContent] of Object.entries(DEFAULT_FILES)) {
+        const { parentId, fileName } = resolveParent(path, cache);
+        const existingId = await findChild(fileName, parentId);
+        if (!existingId) await createFileWithContent(fileName, parentId, defaultContent);
+      }
+
+      return cache;
+    } finally {
+      // 성공/실패 상관없이 다음 호출은 새로 시도할 수 있게 비워둔다(실패했는데 계속 같은
+      // 실패한 프로미스를 공유하면 안 되므로).
+      ensureStructurePromise = null;
+    }
+  })();
+
+  return ensureStructurePromise;
 }
 
 function resolveParent(path: string, cache: FolderIdCache): { parentId: string; fileName: string } {

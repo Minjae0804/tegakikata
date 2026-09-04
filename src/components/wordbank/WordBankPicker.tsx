@@ -156,6 +156,17 @@ export function WordBankPicker({
     }
   };
 
+  // 체크박스로 보여줄 파일 목록 — 지금 폴더에 실제로 있는 CSV뿐 아니라, 이미 적용돼 있거나(다른
+  // 폴더/드라이브 피커로 골라둔 파일 포함) 이번 세션에 방금 피커로 고른 파일도 함께 보여준다.
+  // 안 그러면 "이미 2개 적용됨" 상태인데 지금 보는 폴더엔 그 파일이 없어서 목록이 텅 비어 보이고,
+  // 체크 해제할 방법도 없어 보이는 문제가 생긴다.
+  const displayedFilesMap = new Map<string, WordBankFileRef>();
+  for (const f of csvFiles) displayedFilesMap.set(f.id, f);
+  for (const f of pickedFiles) displayedFilesMap.set(f.id, f);
+  for (const f of selectedFiles) displayedFilesMap.set(f.id, f);
+  const displayedFiles = Array.from(displayedFilesMap.values());
+  const inCurrentFolder = new Set(csvFiles.map((f) => f.id));
+
   return (
     <div className="flex flex-col gap-4 rounded-[var(--radius-box)] border border-base-300 bg-base-100 p-4">
       <div className="flex items-center justify-between">
@@ -189,10 +200,10 @@ export function WordBankPicker({
         </div>
       )}
 
-      {!browseLoading && (csvFiles.length > 0 || pickedFiles.length > 0) && (
+      {!browseLoading && displayedFiles.length > 0 && (
         <div className="flex flex-col gap-1">
           <span className="font-body text-xs text-base-content/40">CSV 파일</span>
-          {[...csvFiles, ...pickedFiles.filter((p) => !csvFiles.some((f) => f.id === p.id))].map((file) => (
+          {displayedFiles.map((file) => (
             <label
               key={file.id}
               className="font-body flex items-center gap-2 rounded-[var(--radius-field)] px-2 py-1.5 text-sm hover:bg-base-200"
@@ -204,12 +215,15 @@ export function WordBankPicker({
                 onChange={() => toggleChecked(file)}
               />
               {file.name}
+              {!inCurrentFolder.has(file.id) && (
+                <span className="font-body text-base-content/30">— 이미 적용됨 (다른 폴더)</span>
+              )}
             </label>
           ))}
         </div>
       )}
 
-      {!browseLoading && subfolders.length === 0 && csvFiles.length === 0 && pickedFiles.length === 0 && (
+      {!browseLoading && subfolders.length === 0 && displayedFiles.length === 0 && (
         <p className="font-body text-xs text-base-content/40">이 폴더엔 파일이 없어요.</p>
       )}
 
