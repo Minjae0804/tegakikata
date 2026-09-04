@@ -9,6 +9,7 @@ interface HomePageProps {
   onSelectTranslate?: () => void;
   onSelectWordBank?: () => void;
   onSelectWordBankStudy?: () => void;
+  onSelectDiary?: () => void;
   onOpenSettings?: () => void;
   onLogout?: () => void;
 }
@@ -18,6 +19,7 @@ export function HomePage({
   onSelectTranslate,
   onSelectWordBank,
   onSelectWordBankStudy,
+  onSelectDiary,
   onOpenSettings,
   onLogout,
 }: HomePageProps) {
@@ -76,6 +78,14 @@ export function HomePage({
           title="단어장 학습"
           description="복습이 급한 단어부터 순서대로 보여주는 플래시카드예요. AI가 필요 없어요."
           onClick={onSelectWordBankStudy}
+        />
+        <GameModeCard
+          mark="記"
+          title="일기 쓰기"
+          description="AI가 던진 주제로 일본어 일기를 자유롭게 써보면, AI가 첨삭해줘요. 정답/오답이 아니라 코칭이에요."
+          onClick={onSelectDiary}
+          disabled={!aiAvailable}
+          disabledNote="AI 설정이 필요해요"
         />
       </div>
     </div>

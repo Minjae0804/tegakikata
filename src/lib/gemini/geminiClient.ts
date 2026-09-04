@@ -7,6 +7,7 @@
 
 import { GoogleGenAI, Type } from '@google/genai';
 import type {
+  DiaryCorrectionResult,
   FillBlankQuestion,
   TranslateDirection,
   TranslateGradeResult,
@@ -361,4 +362,82 @@ ${grammarNotes ? `학습자가 지금 공부 중인 문법 노트(가능하면 �
   // 한자 없는 단어는 활용형도 한자가 생기면 안 된다(단어장 전체의 "한자 없는 단어" 규칙과
   // 일관성을 맞추기 위해) — AI가 실수로 채워도 여기서 강제로 비운다.
   return wordHasKanji ? result : { ...result, kanji: '' };
+}
+
+/**
+ * 일기 쓰기용 오늘의 주제를 하나 만든다 — "오늘 뭘 했는지" 류의 자유 작문 주제. suggestedWords를
+ * 주면 그 단어들을 쓰면 좋을 만한 방향으로 주제를 살짝 유도하되, 억지로 다 쓰라고 요구하지는
+ * 않는다(자유 작문이 핵심이라 강제하면 일기가 아니라 번역 문제가 돼버림).
+ */
+export async function generateDiaryTopic(
+  apiKey: string,
+  contextSummary: string,
+  suggestedWords?: WordEntry[],
+  model?: string
+): Promise<{ topic: string }> {
+  const wordHint =
+    suggestedWords && suggestedWords.length > 0
+      ? `\n참고: 아래 단어를 쓰면 자연스러울 만한 주제면 좋지만, 강제는 아님(안 써도 전혀 상관없음):\n${suggestedWords
+          .map((w) => (w.kanji.trim() ? `${w.kanji}(${w.reading})` : w.reading) + ` — ${w.meaning}`)
+          .join(', ')}`
+      : '';
+
+  const prompt = `당신은 일본어 학습 앱의 일기 쓰기 코너 진행자입니다.
+학습자가 일본어로 짧은 일기(3~5문장 정도)를 자유롭게 쓸 수 있게, 오늘의 주제/질문을 하나
+한국어로 던져주세요. "오늘 뭘 했는지", "요즘 관심사", "이번 주말 계획" 같은 일상적이고 부담 없는
+주제로, 매번 다르게 다양한 걸 골라주세요.
+
+학습자 상황: ${contextSummary || '특별한 학습 이력 없음'}${wordHint}
+
+요구사항:
+- topic: 한국어 한두 문장. 질문 형태로("오늘 아침에 뭘 먹었는지 써보세요" 등) 구체적으로 던질 것
+- 너무 무겁거나 추상적인 주제는 피하고, 일상 소재로`;
+
+  const schema = {
+    type: Type.OBJECT,
+    properties: {
+      topic: { type: Type.STRING },
+    },
+    required: ['topic'],
+  };
+
+  return (await generateJson(apiKey, prompt, schema, model)) as { topic: string };
+}
+
+/**
+ * 사용자가 자유롭게 쓴 일본어 일기를 첨삭한다 — 정답/오답이 아니라 "더 자연스러운 버전 +
+ * 왜 고쳤는지" 방식. 문법이 이미 맞고 자연스러우면 correctedText는 원문과 거의 같아도 된다.
+ */
+export async function correctDiaryEntry(
+  apiKey: string,
+  topic: string,
+  entryText: string,
+  contextSummary: string,
+  model?: string
+): Promise<DiaryCorrectionResult> {
+  const prompt = `당신은 일본어 학습 앱의 작문 첨삭 선생님입니다. 친절하고 격려하는 톤을 유지하세요.
+학습자가 아래 주제로 일본어 일기를 썼습니다. 문법/표현을 자연스럽게 다듬어주고, 왜 고쳤는지
+한국어로 설명해주세요.
+
+주제: ${topic}
+학습자 상황: ${contextSummary || '특별한 학습 이력 없음'}
+학습자가 쓴 일본어: ${entryText}
+
+요구사항:
+- correctedText: 문법 오류를 고치고 어색한 표현을 자연스럽게 다듬은 전체 버전. 학습자의 원래
+  내용/구조/길이는 최대한 유지할 것(완전히 다른 문장으로 바꾸지 말고, 필요한 부분만 손볼 것).
+  이미 자연스러운 문장이면 그대로 둘 것.
+- feedback: 한국어로 2~4문장. 뭘 왜 고쳤는지 구체적으로 짚어주고, 잘 쓴 부분이 있으면 칭찬도
+  같이 해줄 것. 고칠 게 하나도 없으면 그렇다고 칭찬으로 말해줄 것.`;
+
+  const schema = {
+    type: Type.OBJECT,
+    properties: {
+      correctedText: { type: Type.STRING },
+      feedback: { type: Type.STRING },
+    },
+    required: ['correctedText', 'feedback'],
+  };
+
+  return (await generateJson(apiKey, prompt, schema, model)) as DiaryCorrectionResult;
 }

@@ -5,13 +5,14 @@ import { FillBlankGamePage } from './pages/FillBlankGamePage';
 import { TranslateGamePage } from './pages/TranslateGamePage';
 import { WordBankGamePage } from './pages/WordBankGamePage';
 import { WordBankStudyPage } from './pages/WordBankStudyPage';
+import { DiaryGamePage } from './pages/DiaryGamePage';
 import { SettingsPage } from './pages/SettingsPage';
 import { useProgress } from './hooks/useProgress';
 import { useWordBank } from './hooks/useWordBank';
 import { isDriveAuthenticated, signOutDrive, tryRestoreDriveAuth } from './lib/drive/driveClient';
 import { LanguageProvider } from './lib/i18n/LanguageContext';
 
-type View = 'home' | 'fill-blank' | 'translate' | 'wordbank' | 'wordbank-study' | 'settings';
+type View = 'home' | 'fill-blank' | 'translate' | 'wordbank' | 'wordbank-study' | 'diary' | 'settings';
 
 function App() {
   const [driveReady, setDriveReady] = useState(isDriveAuthenticated());
@@ -81,6 +82,8 @@ function App() {
         return <WordBankGamePage progress={progress} wordBank={wordBank} onExit={() => goTo('home')} />;
       case 'wordbank-study':
         return <WordBankStudyPage progress={progress} wordBank={wordBank} onExit={() => goTo('home')} />;
+      case 'diary':
+        return <DiaryGamePage progress={progress} wordBank={wordBank} onExit={() => goTo('home')} />;
       case 'settings':
         return <SettingsPage onBack={() => goTo('home')} />;
       default:
@@ -90,6 +93,7 @@ function App() {
             onSelectTranslate={() => goTo('translate')}
             onSelectWordBank={() => goTo('wordbank')}
             onSelectWordBankStudy={() => goTo('wordbank-study')}
+            onSelectDiary={() => goTo('diary')}
             onOpenSettings={() => goTo('settings')}
             onLogout={handleLogout}
           />

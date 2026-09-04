@@ -5,6 +5,7 @@
 
 import type {
   AppConfig,
+  DiaryCorrectionResult,
   FillBlankQuestion,
   TranslateDirection,
   TranslateGradeResult,
@@ -92,6 +93,31 @@ export async function generateWordVariation(
   return config.aiProvider === 'gemini'
     ? gemini.generateWordVariation(apiKey, word, grammarNotes, model)
     : claude.generateWordVariation(apiKey, word, grammarNotes, model);
+}
+
+export async function generateDiaryTopic(
+  config: AppConfig,
+  contextSummary: string,
+  suggestedWords?: WordEntry[]
+): Promise<{ topic: string }> {
+  const apiKey = resolveApiKey(config);
+  const model = resolveModel(config);
+  return config.aiProvider === 'gemini'
+    ? gemini.generateDiaryTopic(apiKey, contextSummary, suggestedWords, model)
+    : claude.generateDiaryTopic(apiKey, contextSummary, suggestedWords, model);
+}
+
+export async function correctDiaryEntry(
+  config: AppConfig,
+  topic: string,
+  entryText: string,
+  contextSummary: string
+): Promise<DiaryCorrectionResult> {
+  const apiKey = resolveApiKey(config);
+  const model = resolveModel(config);
+  return config.aiProvider === 'gemini'
+    ? gemini.correctDiaryEntry(apiKey, topic, entryText, contextSummary, model)
+    : claude.correctDiaryEntry(apiKey, topic, entryText, contextSummary, model);
 }
 
 /** 현재 설정에 필요한 API 키가 채워져 있는지 확인한다. */

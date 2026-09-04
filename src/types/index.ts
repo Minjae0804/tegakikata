@@ -102,6 +102,15 @@ export interface WordRecallGradeResult {
 }
 
 /**
+ * 일기 쓰기의 첨삭 결과 — 정답/오답이 아니라 "더 자연스러운 버전 + 왜 고쳤는지 설명"인 첨삭
+ * 방식이다(TranslateGradeResult의 isCorrect 같은 이분법 판정이 없음).
+ */
+export interface DiaryCorrectionResult {
+  correctedText: string; // 문법/표현을 다듬은 버전 전체(사용자가 쓴 것과 같은 길이/구조 유지)
+  feedback: string; // 한국어로 된 첨삭 설명 — 뭘 왜 고쳤는지, 잘 쓴 부분 칭찬 등
+}
+
+/**
  * 단어장 맞추기의 "AI 활용형 출제" — 사전형(word) 대신 AI가 자연스러운 활용/파생형을 하나
  * 만들어서 그걸로 문제를 낸다(飲む → 飲みすぎる, 食べる → 食べたい 등). 문법 노트를 참고해서
  * 만들기 때문에, 사용자가 지금 배우고 있는 문형 위주로 나오게 할 수 있다.
