@@ -110,15 +110,24 @@ function mergeProgressMaps(
  * 이름>.json이 아직 남아있으면(마이그레이션 안 된 경우) 그것도 같이 병합해서 끌어온다.
  * 그 예전 파일 자체는 이제 다시 쓰지 않는다 — 다음 flush부터는 CSV 쪽에 반영되고, 예전 파일은
  * 그냥 안 쓰이는 채로 드라이브에 남는다(원하면 사용자가 직접 지워도 됨).
+ *
+ * migrated가 true면(예전 파일에서 실제로 병합해온 게 있으면) 호출하는 쪽에서 그 단어장을 dirty로
+ * 표시해야 한다 — 안 그러면 이 병합 결과는 로컬 상태/캐시에만 남고, 사용자가 그 단어장에서 실제로
+ * 뭔가 답을 맞히기 전까진 CSV에 절대 다시 써지지 않는다(그 사이 예전 파일이 지워지면 그 진도는
+ * 영영 사라진다).
  */
-async function loadBankProgress(bankName: string, fileId: string): Promise<Map<string, ProgressEntry>> {
+async function loadBankProgress(
+  bankName: string,
+  fileId: string
+): Promise<{ progress: Map<string, ProgressEntry>; migrated: boolean }> {
   const csvText = await readWordBankFileById(fileId);
   const fromCsv = parseWordBankCsvProgress(csvText, bankName);
   try {
     const legacy = legacyStoreToMap(await readAppFile<ProgressStore>(`saves/progress-${bankName}.json`));
-    return mergeProgressMaps(fromCsv, legacy);
+    if (legacy.size === 0) return { progress: fromCsv, migrated: false };
+    return { progress: mergeProgressMaps(fromCsv, legacy), migrated: true };
   } catch {
-    return fromCsv;
+    return { progress: fromCsv, migrated: false };
   }
 }
 
@@ -158,19 +167,26 @@ export function useProgress(enabled = true, words: WordEntry[] = []) {
     setLoading(true);
     setError(null);
     try {
-      const loadedMaps = await Promise.all(
-        Array.from(groups, async ([bank, { fileId }]) => {
+      const bankNames = Array.from(groups.keys());
+      const loaded = await Promise.all(
+        bankNames.map(async (bank) => {
+          const { fileId } = groups.get(bank)!;
           try {
             return await loadBankProgress(bank, fileId);
           } catch {
-            return new Map<string, ProgressEntry>();
+            return { progress: new Map<string, ProgressEntry>(), migrated: false };
           }
         })
       );
-      for (const bank of groups.keys()) loadedBanksRef.current.add(bank);
+      for (const bank of bankNames) loadedBanksRef.current.add(bank);
+      // 예전 saves/progress-*.json에서 실제로 병합해온 단어장은 dirty로 표시해서, 다음 flush 때
+      // (사용자가 아무 답도 안 맞혀도) CSV에 확실히 반영되게 한다.
+      bankNames.forEach((bank, i) => {
+        if (loaded[i].migrated) dirtyBanksRef.current.add(bank);
+      });
       setEntries((prev) => {
         const next = new Map(prev);
-        for (const m of loadedMaps) for (const [k, v] of m) next.set(k, v);
+        for (const { progress } of loaded) for (const [k, v] of progress) next.set(k, v);
         latestRef.current = next;
         setCached(CACHE_KEY, toCacheStore(next));
         return next;
@@ -196,16 +212,21 @@ export function useProgress(enabled = true, words: WordEntry[] = []) {
         try {
           return await loadBankProgress(bank, fileId);
         } catch {
-          return new Map<string, ProgressEntry>();
+          return { progress: new Map<string, ProgressEntry>(), migrated: false };
         }
       })
     )
-      .then((loadedMaps) => {
+      .then((loaded) => {
         if (cancelled) return;
-        for (const [bank] of toLoad) loadedBanksRef.current.add(bank);
+        // 예전 saves/progress-*.json에서 실제로 병합해온 단어장은 dirty로 표시해서, 다음 flush 때
+        // (사용자가 아무 답도 안 맞혀도) CSV에 확실히 반영되게 한다.
+        toLoad.forEach(([bank], i) => {
+          loadedBanksRef.current.add(bank);
+          if (loaded[i].migrated) dirtyBanksRef.current.add(bank);
+        });
         setEntries((prev) => {
           const next = new Map(prev);
-          for (const m of loadedMaps) for (const [k, v] of m) next.set(k, v);
+          for (const { progress } of loaded) for (const [k, v] of progress) next.set(k, v);
           latestRef.current = next;
           setCached(CACHE_KEY, toCacheStore(next));
           return next;
