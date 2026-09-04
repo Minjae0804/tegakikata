@@ -26,11 +26,15 @@ interface TranslateGamePageProps {
   onExit?: () => void;
 }
 
-/** 한 문제에 쓸 단어 개수를 무작위로 정한다 — 최소 2개, 최대 7개(단어장이 그보다 작으면 있는 만큼만). */
+/**
+ * 한 문제에 쓸 단어 개수를 무작위로 정한다 — 최소 2개, 최대 4개(단어장이 그보다 작으면 있는 만큼만).
+ * 예전엔 최대 7개까지 한 문장에 욱여넣게 했더니 문장이 부자연스러워지는 경우가 많아서 줄였다 —
+ * 그래도 프롬프트 쪽에서 자연스러움이 우선이라 다 못 넣으면 일부는 빼도 되게 해뒀다.
+ */
 function randomWordCount(available: number): number {
   if (available <= 0) return 0;
   const min = Math.min(2, available);
-  const max = Math.min(7, available);
+  const max = Math.min(4, available);
   return min + Math.floor(Math.random() * (max - min + 1));
 }
 
