@@ -105,6 +105,19 @@ export function DiaryGamePage({ progress, wordBank, onExit }: DiaryGamePageProps
     setKanaMode('kanji');
   };
 
+  /**
+   * 같은 주제/같은 글에 계속 이어서 쓴다 — round를 안 건드려서 새 주제를 안 불러오고, entryText도
+   * (첨삭본이 아니라) 원래 쓴 그대로 유지해서 자기 글에 계속 덧붙여 쓰게 한다. 다음 "첨삭받기"는
+   * 늘어난 전체 글을 다시 통째로 첨삭한다.
+   */
+  const handleContinue = () => {
+    setResult(null);
+    setCorrectError(null);
+    setHandwritingOpen(false);
+    setKanaMode('kanji');
+    setEntryText((prev) => (prev.endsWith('\n') ? prev : `${prev}\n`));
+  };
+
   if (!hasRequiredApiKey(config)) {
     return (
       <div className="flex flex-col gap-4 p-8">
@@ -262,11 +275,34 @@ export function DiaryGamePage({ progress, wordBank, onExit }: DiaryGamePageProps
                     <span className="font-body text-xs text-base-content/50">첨삭된 버전</span>
                   </div>
                   <p className="font-jp text-base text-base-content">{result.correctedText}</p>
+                  <p className="font-body text-xs text-base-content/50">번역: {result.correctedTranslation}</p>
                 </div>
+
+                <p className="font-body text-xs text-base-content/40">
+                  내가 쓴 문장 번역: {result.originalTranslation}
+                </p>
+
                 <p className="font-body text-sm text-base-content/70">{result.feedback}</p>
-                <Button variant="primary" onClick={handleNewTopic}>
-                  새 주제로 다시 쓰기
-                </Button>
+
+                {/* 문법 첨삭과는 별개로, 내용 자체에 대한 감상 — 그래서 위 카드와 구분되게 다른 색/아이콘. */}
+                <div className="flex flex-col gap-2 rounded-[var(--radius-box)] border border-secondary bg-secondary/5 p-4">
+                  <div className="flex items-center gap-2">
+                    <span className="font-display flex h-8 w-8 shrink-0 items-center justify-center rounded-full border-2 border-secondary text-secondary">
+                      💬
+                    </span>
+                    <span className="font-body text-xs text-base-content/50">내용에 대한 감상</span>
+                  </div>
+                  <p className="font-body text-sm text-base-content">{result.impression}</p>
+                </div>
+
+                <div className="flex gap-2">
+                  <Button variant="outline" onClick={handleContinue}>
+                    이어서 쓰기
+                  </Button>
+                  <Button variant="primary" onClick={handleNewTopic}>
+                    새 주제로 다시 쓰기
+                  </Button>
+                </div>
               </>
             )}
           </div>

@@ -34,7 +34,9 @@ async function generateStructured<T>(
   const ai = client(apiKey);
   const response = await ai.messages.create({
     model,
-    max_tokens: 1024,
+    // 일기 첨삭처럼 필드가 여러 개(교정본/번역 2개/피드백/감상)라 1024로는 긴 일기에서 잘릴 수
+    // 있어서 여유 있게 잡는다 — 짧은 응답이면 어차피 그만큼만 쓰고 끝난다.
+    max_tokens: 2048,
     messages: [{ role: 'user', content: prompt }],
     tools: [
       {
@@ -414,9 +416,8 @@ export async function correctDiaryEntry(
   contextSummary: string,
   model?: string
 ): Promise<DiaryCorrectionResult> {
-  const prompt = `당신은 일본어 학습 앱의 작문 첨삭 선생님입니다. 친절하고 격려하는 톤을 유지하세요.
-학습자가 아래 주제로 일본어 일기를 썼습니다. 문법/표현을 자연스럽게 다듬어주고, 왜 고쳤는지
-한국어로 설명해주세요.
+  const prompt = `당신은 일본어 학습 앱의 작문 첨삭 선생님이자, 일기를 읽어주는 다정한 친구입니다.
+학습자가 아래 주제로 일본어 일기를 썼습니다.
 
 주제: ${topic}
 학습자 상황: ${contextSummary || '특별한 학습 이력 없음'}
@@ -426,15 +427,25 @@ export async function correctDiaryEntry(
 - correctedText: 문법 오류를 고치고 어색한 표현을 자연스럽게 다듬은 전체 버전. 학습자의 원래
   내용/구조/길이는 최대한 유지할 것(완전히 다른 문장으로 바꾸지 말고, 필요한 부분만 손볼 것).
   이미 자연스러운 문장이면 그대로 둘 것.
-- feedback: 한국어로 2~4문장. 뭘 왜 고쳤는지 구체적으로 짚어주고, 잘 쓴 부분이 있으면 칭찬도
-  같이 해줄 것. 고칠 게 하나도 없으면 그렇다고 칭찬으로 말해줄 것.`;
+- feedback: 한국어로 2~4문장. 뭘 왜 고쳤는지 구체적으로(문법 관점에서) 짚어주고, 잘 쓴 부분이
+  있으면 칭찬도 같이 해줄 것. 고칠 게 하나도 없으면 그렇다고 칭찬으로 말해줄 것.
+- originalTranslation: 학습자가 쓴 원문(entryText) 그대로를 자연스러운 한국어로 번역한 것.
+  문법이 틀린 부분이 있어도 의도를 최대한 살려서 번역할 것.
+- correctedTranslation: correctedText를 자연스러운 한국어로 번역한 것. originalTranslation과
+  뜻이 같으면 똑같이 적어도 되고, 교정으로 뉘앙스가 달라졌으면 그 차이를 반영할 것.
+- impression: 문법 얘기가 아니라 일기 "내용" 자체에 대한 짧은 감상/반응(한국어 2~3문장). 친구가
+  일기를 읽고 반응해주듯 캐주얼하고 다정한 톤으로 — 공감하거나, 재밌어하거나, 궁금한 걸
+  되묻거나 해도 좋음. 첨삭 피드백(feedback)과 겹치지 않게, 순수하게 내용에 대한 반응만.`;
 
   const schema = {
     properties: {
       correctedText: { type: 'string' },
       feedback: { type: 'string' },
+      originalTranslation: { type: 'string' },
+      correctedTranslation: { type: 'string' },
+      impression: { type: 'string' },
     },
-    required: ['correctedText', 'feedback'],
+    required: ['correctedText', 'feedback', 'originalTranslation', 'correctedTranslation', 'impression'],
   };
 
   return generateStructured<DiaryCorrectionResult>(apiKey, prompt, schema, model);

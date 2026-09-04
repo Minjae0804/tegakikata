@@ -108,6 +108,9 @@ export interface WordRecallGradeResult {
 export interface DiaryCorrectionResult {
   correctedText: string; // 문법/표현을 다듬은 버전 전체(사용자가 쓴 것과 같은 길이/구조 유지)
   feedback: string; // 한국어로 된 첨삭 설명 — 뭘 왜 고쳤는지, 잘 쓴 부분 칭찬 등
+  originalTranslation: string; // 사용자가 쓴 원문 그대로의 한국어 번역
+  correctedTranslation: string; // correctedText의 한국어 번역(교정으로 뉘앙스가 바뀌었으면 다를 수 있음)
+  impression: string; // 문법 얘기가 아니라 일기 "내용"에 대한 AI의 감상/반응 (한국어, 친구처럼 캐주얼하게)
 }
 
 /**
