@@ -8,7 +8,8 @@
 // 아직 아무것도 선택 안 했으면 임시 샘플로 대체한다. "단어장 선택" 버튼으로 하위 폴더 -> CSV 파일
 // 순서로 탐색해서 원하는 파일만 골라 적용할 수 있다.
 // AI 예문 생성 시 grammar/ 폴더에서 고른 문법 노트(useGrammarBank)를 컨텍스트로 같이 넘긴다 —
-// 어떤 파일을 쓸지는 단어장 맞추기 화면의 "문법 노트 선택"에서 고른 게 그대로 적용된다(캐시 공유).
+// "문법 노트 선택" 버튼으로 이 화면에서 직접 고를 수 있고, 단어장 맞추기 등 다른 화면에서 고른
+// 것도 캐시를 공유해서 그대로 적용된다.
 import { useEffect, useMemo, useState } from 'react';
 import { KanaInputPanel, type KanaInputMode } from '../components/game/fill-blank/KanaInputPanel';
 import { FeedbackBanner } from '../components/common/FeedbackBanner';
@@ -19,6 +20,7 @@ import { useAppConfig } from '../hooks/useAppConfig';
 import type { WordBankController } from '../hooks/useWordBank';
 import type { ProgressController } from '../hooks/useProgress';
 import { WordBankPicker } from '../components/wordbank/WordBankPicker';
+import { GrammarPicker } from '../components/grammar/GrammarPicker';
 import { useGrammarBank } from '../hooks/useGrammarBank';
 import { generateFillBlankQuestion, hasRequiredApiKey } from '../lib/ai/aiClient';
 import { shuffle } from '../lib/wordbank/shuffle';
@@ -35,7 +37,7 @@ interface FillBlankGamePageProps {
 
 export function FillBlankGamePage({ progress, wordBank, onExit }: FillBlankGamePageProps) {
   const { config } = useAppConfig(true);
-  const { notes: grammarNotes } = useGrammarBank(true);
+  const grammarBank = useGrammarBank(true);
   // 나가기 버튼을 누르면(=1분 주기 flush를 기다리지 않고) 밀린 진도를 바로 저장한 뒤 나간다.
   const handleExit = () => {
     void progress.flush();
@@ -43,6 +45,7 @@ export function FillBlankGamePage({ progress, wordBank, onExit }: FillBlankGameP
   };
 
   const [pickerOpen, setPickerOpen] = useState(false);
+  const [grammarPickerOpen, setGrammarPickerOpen] = useState(false);
 
   const [question, setQuestion] = useState<FillBlankQuestion | null>(null);
   const [questionLoading, setQuestionLoading] = useState(false);
@@ -77,7 +80,7 @@ export function FillBlankGamePage({ progress, wordBank, onExit }: FillBlankGameP
     setQuestionError(null);
     try {
       const word = shuffledWords.length > 0 ? shuffledWords[wordIndex % shuffledWords.length] : undefined;
-      const generated = await generateFillBlankQuestion(config, word, grammarNotes);
+      const generated = await generateFillBlankQuestion(config, word, grammarBank.notes);
       setQuestion(generated);
     } catch (e) {
       setQuestionError(e instanceof Error ? e.message : '문제를 불러오지 못했습니다.');
@@ -180,6 +183,9 @@ export function FillBlankGamePage({ progress, wordBank, onExit }: FillBlankGameP
         <Button variant="ghost" size="sm" onClick={() => setPickerOpen((v) => !v)}>
           {pickerOpen ? '단어장 선택 닫기' : '단어장 선택'}
         </Button>
+        <Button variant="ghost" size="sm" onClick={() => setGrammarPickerOpen((v) => !v)}>
+          {grammarPickerOpen ? '문법 노트 선택 닫기' : '문법 노트 선택'}
+        </Button>
       </div>
 
       {wordBank.wordsError && (
@@ -199,6 +205,23 @@ export function FillBlankGamePage({ progress, wordBank, onExit }: FillBlankGameP
           onApply={(files) => {
             void wordBank.loadWords(files);
             setPickerOpen(false);
+          }}
+        />
+      )}
+
+      {grammarPickerOpen && (
+        <GrammarPicker
+          rootFolderId={grammarBank.rootFolderId}
+          subfolders={grammarBank.subfolders}
+          files={grammarBank.files}
+          browseLoading={grammarBank.browseLoading}
+          browseError={grammarBank.browseError}
+          onBrowse={grammarBank.browseFolder}
+          selectedFiles={grammarBank.selectedFiles}
+          notesLoading={grammarBank.notesLoading}
+          onApply={(files) => {
+            void grammarBank.loadNotes(files);
+            setGrammarPickerOpen(false);
           }}
         />
       )}

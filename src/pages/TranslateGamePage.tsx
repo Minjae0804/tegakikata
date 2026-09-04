@@ -12,6 +12,7 @@ import { useGrammarBank } from '../hooks/useGrammarBank';
 import type { WordBankController } from '../hooks/useWordBank';
 import type { ProgressController } from '../hooks/useProgress';
 import { WordBankPicker } from '../components/wordbank/WordBankPicker';
+import { GrammarPicker } from '../components/grammar/GrammarPicker';
 import { generateTranslateQuestion, gradeTranslation, hasRequiredApiKey } from '../lib/ai/aiClient';
 import { shuffle } from '../lib/wordbank/shuffle';
 import { hasKanji } from '../lib/wordbank/hasKanji';
@@ -33,7 +34,7 @@ function randomWordCount(available: number): number {
 
 export function TranslateGamePage({ progress, wordBank, onExit }: TranslateGamePageProps) {
   const { config } = useAppConfig(true);
-  const { notes: grammarNotes } = useGrammarBank(true);
+  const grammarBank = useGrammarBank(true);
   // 나가기 버튼을 누르면(=1분 주기 flush를 기다리지 않고) 밀린 진도를 바로 저장한 뒤 나간다.
   const handleExit = () => {
     void progress.flush();
@@ -41,6 +42,7 @@ export function TranslateGamePage({ progress, wordBank, onExit }: TranslateGameP
   };
 
   const [pickerOpen, setPickerOpen] = useState(false);
+  const [grammarPickerOpen, setGrammarPickerOpen] = useState(false);
   const [wordIndex, setWordIndex] = useState(0);
 
   // CSV에 적힌 순서 그대로 반복 출제되지 않도록, 단어장이 (다시) 로드될 때마다 한 번 섞어둔다.
@@ -73,7 +75,7 @@ export function TranslateGamePage({ progress, wordBank, onExit }: TranslateGameP
     try {
       const count = randomWordCount(shuffledWords.length);
       const words = Array.from({ length: count }, (_, i) => shuffledWords[(wordIndex + i) % shuffledWords.length]);
-      const generated = await generateTranslateQuestion(config, grammarNotes, words.length > 0 ? words : undefined);
+      const generated = await generateTranslateQuestion(config, grammarBank.notes, words.length > 0 ? words : undefined);
       setKoreanSentence(generated.koreanSentence);
       setQuestionWords(words);
     } catch (e) {
@@ -149,6 +151,9 @@ export function TranslateGamePage({ progress, wordBank, onExit }: TranslateGameP
         <Button variant="ghost" size="sm" onClick={() => setPickerOpen((v) => !v)}>
           {pickerOpen ? '단어장 선택 닫기' : '단어장 선택'}
         </Button>
+        <Button variant="ghost" size="sm" onClick={() => setGrammarPickerOpen((v) => !v)}>
+          {grammarPickerOpen ? '문법 노트 선택 닫기' : '문법 노트 선택'}
+        </Button>
       </div>
 
       {wordBank.wordsError && (
@@ -168,6 +173,23 @@ export function TranslateGamePage({ progress, wordBank, onExit }: TranslateGameP
           onApply={(files) => {
             void wordBank.loadWords(files);
             setPickerOpen(false);
+          }}
+        />
+      )}
+
+      {grammarPickerOpen && (
+        <GrammarPicker
+          rootFolderId={grammarBank.rootFolderId}
+          subfolders={grammarBank.subfolders}
+          files={grammarBank.files}
+          browseLoading={grammarBank.browseLoading}
+          browseError={grammarBank.browseError}
+          onBrowse={grammarBank.browseFolder}
+          selectedFiles={grammarBank.selectedFiles}
+          notesLoading={grammarBank.notesLoading}
+          onApply={(files) => {
+            void grammarBank.loadNotes(files);
+            setGrammarPickerOpen(false);
           }}
         />
       )}
