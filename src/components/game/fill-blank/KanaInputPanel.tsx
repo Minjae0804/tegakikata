@@ -21,8 +21,10 @@ const MODE_LABELS: Record<KanaInputMode, string> = {
   katakana: '가타카나 입력',
 };
 
-// 히라가나/가타카나 버튼 팔레트를 접어둔 상태를 기기에 기억해둔다 — 화면 공간을 많이 차지해서,
-// 한 번 접어두면 새로고침하거나 다른 문제로 넘어가도 계속 접힌 채로 유지되길 바라는 사용자가 많다.
+// 입력기(모드 선택 탭 + 필기 캔버스/가나 버튼 팔레트) 전체를 접어둔 상태를 기기에 기억해둔다 —
+// 화면 공간을 많이 차지해서, 한 번 접어두면 새로고침하거나 다른 문제로 넘어가도 계속 접힌 채로
+// 유지되길 바라는 사용자가 많다. 토글 버튼 자체는 모드와 무관하게 항상 떠 있고, 접혀 있어도
+// 언제든 눌러서 펼친 뒤 모드를 바꿀 수 있다.
 const KANA_COLLAPSED_CACHE_KEY = 'kanaKeyboardCollapsed';
 
 interface KanaInputPanelProps {
@@ -62,51 +64,48 @@ export function KanaInputPanel({ mode, onModeChange, onSelect, modes = ['kanji',
 
   return (
     <div className="flex flex-col items-center gap-3">
-      {modes.length > 1 && (
-        <div className="flex gap-2">
-          {modes.map((m) => (
-            <button
-              key={m}
-              type="button"
-              onClick={() => handleModeChange(m)}
-              className={`btn btn-sm rounded-[var(--radius-field)] ${mode === m ? 'btn-primary' : 'btn-outline'}`}
-            >
-              {MODE_LABELS[m]}
-            </button>
-          ))}
-        </div>
-      )}
+      <button
+        type="button"
+        onClick={toggleKanaCollapsed}
+        className="btn btn-sm btn-outline rounded-[var(--radius-field)]"
+      >
+        {kanaCollapsed ? `입력기 펼치기 (${MODE_LABELS[mode]}) ▾` : '입력기 접기 ▴'}
+      </button>
 
-      {mode === 'kanji' && modes.includes('kanji') && (
-        <div className="flex flex-col items-center gap-3">
-          <HandwritingFrame key={canvasKey} onRecognize={setCandidates} onClear={() => setCandidates([])} />
-          {candidates.length > 0 && (
-            <div className="flex flex-col items-center gap-2">
-              <span className="font-body text-xs text-base-content/50">
-                인식 후보 — 고르면 입력한 글자에 추가돼요
-              </span>
-              <CandidateChips candidates={candidates} onSelect={handleCandidateSelect} />
+      {!kanaCollapsed && (
+        <>
+          {modes.length > 1 && (
+            <div className="flex gap-2">
+              {modes.map((m) => (
+                <button
+                  key={m}
+                  type="button"
+                  onClick={() => handleModeChange(m)}
+                  className={`btn btn-sm rounded-[var(--radius-field)] ${mode === m ? 'btn-primary' : 'btn-outline'}`}
+                >
+                  {MODE_LABELS[m]}
+                </button>
+              ))}
             </div>
           )}
-        </div>
-      )}
 
-      {(mode === 'hiragana' || mode === 'katakana') && (
-        <div className="flex w-full flex-col items-center gap-2">
-          <button
-            type="button"
-            onClick={toggleKanaCollapsed}
-            className="font-body flex items-center gap-1 text-xs text-base-content/50 hover:text-base-content/80"
-          >
-            {kanaCollapsed ? '입력기 펼치기 ▾' : '입력기 접기 ▴'}
-          </button>
-          {!kanaCollapsed && (
-            <>
-              {mode === 'hiragana' && <HiraganaKeyboard onSelect={onSelect} />}
-              {mode === 'katakana' && <KatakanaKeyboard onSelect={onSelect} />}
-            </>
+          {mode === 'kanji' && modes.includes('kanji') && (
+            <div className="flex flex-col items-center gap-3">
+              <HandwritingFrame key={canvasKey} onRecognize={setCandidates} onClear={() => setCandidates([])} />
+              {candidates.length > 0 && (
+                <div className="flex flex-col items-center gap-2">
+                  <span className="font-body text-xs text-base-content/50">
+                    인식 후보 — 고르면 입력한 글자에 추가돼요
+                  </span>
+                  <CandidateChips candidates={candidates} onSelect={handleCandidateSelect} />
+                </div>
+              )}
+            </div>
           )}
-        </div>
+
+          {mode === 'hiragana' && <HiraganaKeyboard onSelect={onSelect} />}
+          {mode === 'katakana' && <KatakanaKeyboard onSelect={onSelect} />}
+        </>
       )}
     </div>
   );
