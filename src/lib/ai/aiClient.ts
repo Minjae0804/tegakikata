@@ -6,6 +6,7 @@
 import type {
   AppConfig,
   FillBlankQuestion,
+  TranslateDirection,
   TranslateGradeResult,
   WordEntry,
   WordRecallGradeResult,
@@ -45,25 +46,27 @@ export async function generateFillBlankQuestion(
 export async function generateTranslateQuestion(
   config: AppConfig,
   contextSummary: string,
+  direction: TranslateDirection,
   words?: WordEntry[]
-): Promise<{ koreanSentence: string }> {
+): Promise<{ sourceSentence: string }> {
   const apiKey = resolveApiKey(config);
   const model = resolveModel(config);
   return config.aiProvider === 'gemini'
-    ? gemini.generateTranslateQuestion(apiKey, contextSummary, words, model)
-    : claude.generateTranslateQuestion(apiKey, contextSummary, words, model);
+    ? gemini.generateTranslateQuestion(apiKey, contextSummary, direction, words, model)
+    : claude.generateTranslateQuestion(apiKey, contextSummary, direction, words, model);
 }
 
 export async function gradeTranslation(
   config: AppConfig,
-  koreanSentence: string,
+  direction: TranslateDirection,
+  sourceSentence: string,
   userAnswer: string
 ): Promise<TranslateGradeResult> {
   const apiKey = resolveApiKey(config);
   const model = resolveModel(config);
   return config.aiProvider === 'gemini'
-    ? gemini.gradeTranslation(apiKey, koreanSentence, userAnswer, model)
-    : claude.gradeTranslation(apiKey, koreanSentence, userAnswer, model);
+    ? gemini.gradeTranslation(apiKey, direction, sourceSentence, userAnswer, model)
+    : claude.gradeTranslation(apiKey, direction, sourceSentence, userAnswer, model);
 }
 
 export async function gradeWordRecall(

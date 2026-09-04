@@ -81,9 +81,12 @@ export interface FillBlankQuestion {
   translation: string; // 예문 전체의 한국어 해석 — 답 확인할 때 같이 보여준다
 }
 
+/** 번역 게임 방향 — koToJa: 한국어 문장을 보고 일본어로, jaToKo: 일본어 문장을 보고 한국어로. */
+export type TranslateDirection = 'koToJa' | 'jaToKo';
+
 export interface TranslateQuestion {
-  koreanSentence: string;
-  referenceJapanese?: string; // 채점 참고용, 사용자에게 노출 안 함
+  /** 방향에 따라 한국어 문장(koToJa) 또는 일본어 문장(jaToKo). */
+  sourceSentence: string;
 }
 
 export interface TranslateGradeResult {

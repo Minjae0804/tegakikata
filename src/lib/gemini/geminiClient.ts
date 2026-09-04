@@ -6,7 +6,14 @@
 // lib/claude/claudeClient.ts를 기본으로 쓰고 있음. 이 파일은 문제가 풀리면 바로 다시 쓸 수 있게 유지.
 
 import { GoogleGenAI, Type } from '@google/genai';
-import type { FillBlankQuestion, TranslateGradeResult, WordEntry, WordRecallGradeResult, WordVariation } from '../../types';
+import type {
+  FillBlankQuestion,
+  TranslateDirection,
+  TranslateGradeResult,
+  WordEntry,
+  WordRecallGradeResult,
+  WordVariation,
+} from '../../types';
 
 // 기본 모델명. 사용자가 온보딩에서 직접 모델을 지정하면(config.geminiModel) 그 값을 대신 쓴다.
 // 실제로 안 되면 https://ai.google.dev/api/models 에서 최신 모델명을 확인할 것.
@@ -165,25 +172,33 @@ export async function generateFillBlankQuestion(
 }
 
 /**
- * 학습 컨텍스트를 바탕으로 번역 게임용 한국어 문장을 생성한다.
- * words를 주면 그 단어들의 뜻이 전부 자연스럽게 들어가는 문장을 만들어서, 번역하면 그 단어들을
- * 쓰게 유도한다 (한 문제에 2~7개 — 문장 난이도를 위해 개수는 호출부에서 정해서 넘긴다).
+ * 학습 컨텍스트를 바탕으로 번역 게임용 문장을 생성한다 — direction이 koToJa면 한국어 문장(학습자가
+ * 일본어로 번역), jaToKo면 일본어 문장(학습자가 한국어로 번역)을 만든다.
+ * words를 주면 그 단어들이 전부 자연스럽게 들어가는 문장을 만들어서, 번역하면 그 단어들을
+ * 실제로 쓰게/마주치게 유도한다 (한 문제에 2~7개 — 문장 난이도를 위해 개수는 호출부에서 정해서 넘긴다).
  */
 export async function generateTranslateQuestion(
   apiKey: string,
   contextSummary: string,
+  direction: TranslateDirection,
   words?: WordEntry[],
   model?: string
-): Promise<{ koreanSentence: string }> {
+): Promise<{ sourceSentence: string }> {
   const wordRequirement =
     words && words.length > 0
-      ? `- 문장 안에 다음 단어들의 뜻이 전부 자연스럽게 들어가야 함. 번역할 때 학습자가 이 단어들을
+      ? direction === 'koToJa'
+        ? `- 문장 안에 다음 단어들의 뜻이 전부 자연스럽게 들어가야 함. 번역할 때 학습자가 이 단어들을
   실제로 쓰게 되는 문장이어야 함(억지로 다 우겨넣어서 문장이 부자연스러워지면 안 되고, 자연스럽게
   하나의 상황/문맥으로 엮을 것):
   ${words.map((w) => `"${w.meaning}"(일본어로는 ${w.kanji.trim() ? `${w.kanji}/${w.reading}` : w.reading})`).join(', ')}`
+        : `- 문장 안에 다음 단어들이(한자/읽기 그대로) 전부 자연스럽게 들어가야 함(억지로 다 우겨넣어서
+  문장이 부자연스러워지면 안 되고, 자연스럽게 하나의 상황/문맥으로 엮을 것):
+  ${words.map((w) => (w.kanji.trim() ? `${w.kanji}(${w.reading})` : w.reading) + `— 뜻: ${w.meaning}`).join(', ')}`
       : '';
 
-  const prompt = `당신은 일본어 학습 앱의 문제 출제자입니다.
+  const prompt =
+    direction === 'koToJa'
+      ? `당신은 일본어 학습 앱의 문제 출제자입니다.
 한국어 문장 하나를 만들어주세요. 학습자가 이 문장을 일본어로 번역하는 연습을 할 거예요.
 
 학습자 상황: ${contextSummary || '특별한 학습 이력 없음'}
@@ -192,35 +207,60 @@ export async function generateTranslateQuestion(
 - 일상 대화에서 쓸 법한 자연스러운 한국어 문장
 - 학습자 수준에 맞는 문법/어휘 난이도
 ${wordRequirement}
-- 한 문장만 작성`;
+- 한 문장만 작성
+- 결과는 sourceSentence 필드 하나에 그 한국어 문장을 담을 것`
+      : `당신은 일본어 학습 앱의 문제 출제자입니다.
+일본어 문장 하나를 만들어주세요. 학습자가 이 문장을 한국어로 번역하는 연습을 할 거예요.
+
+학습자 상황: ${contextSummary || '특별한 학습 이력 없음'}
+
+요구사항:
+- 일상 대화에서 쓸 법한 자연스러운 일본어 문장, 상용한자 위주로 표기
+- 학습자 수준에 맞는 문법/어휘 난이도
+${wordRequirement}
+- 한 문장만 작성
+- 결과는 sourceSentence 필드 하나에 그 일본어 문장을 담을 것`;
 
   const schema = {
     type: Type.OBJECT,
     properties: {
-      koreanSentence: { type: Type.STRING },
+      sourceSentence: { type: Type.STRING },
     },
-    required: ['koreanSentence'],
+    required: ['sourceSentence'],
   };
 
-  return (await generateJson(apiKey, prompt, schema, model)) as { koreanSentence: string };
+  return (await generateJson(apiKey, prompt, schema, model)) as { sourceSentence: string };
 }
 
-/** 사용자의 일본어 번역이 원문 의미를 잘 전달하는지 채점한다. */
+/** 사용자의 번역이 원문 의미를 잘 전달하는지 채점한다 — direction으로 원문/번역 언어가 갈린다. */
 export async function gradeTranslation(
   apiKey: string,
-  koreanSentence: string,
+  direction: TranslateDirection,
+  sourceSentence: string,
   userAnswer: string,
   model?: string
 ): Promise<TranslateGradeResult> {
-  const prompt = `당신은 일본어 학습 앱의 채점자입니다.
+  const prompt =
+    direction === 'koToJa'
+      ? `당신은 일본어 학습 앱의 채점자입니다.
 아래 한국어 문장을 사용자가 일본어로 번역했습니다. 의미와 문법을 기준으로 채점해주세요.
 어순이나 표현이 정답과 다르더라도 의미가 통하고 문법이 맞으면 정답으로 처리하세요.
 
-원문(한국어): ${koreanSentence}
+원문(한국어): ${sourceSentence}
 사용자 번역(일본어): ${userAnswer}
 
 요구사항:
 - isCorrect: 의미가 통하고 문법이 자연스러우면 true, 아니면 false
+- feedback: 한국어로 1~2문장. 틀렸다면 어디가 왜 틀렸는지, 맞았다면 짧게 칭찬`
+      : `당신은 일본어 학습 앱의 채점자입니다.
+아래 일본어 문장을 사용자가 한국어로 번역했습니다. 의미를 기준으로 채점해주세요.
+어순이나 표현이 정답과 다르더라도 의미가 통하면 정답으로 처리하세요(맞춤법은 너그럽게 볼 것).
+
+원문(일본어): ${sourceSentence}
+사용자 번역(한국어): ${userAnswer}
+
+요구사항:
+- isCorrect: 의미가 잘 통하면 true, 아니면 false
 - feedback: 한국어로 1~2문장. 틀렸다면 어디가 왜 틀렸는지, 맞았다면 짧게 칭찬`;
 
   const schema = {

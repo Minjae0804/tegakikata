@@ -1,6 +1,8 @@
-// 한->일 번역 게임: AI(Gemini/Claude 선택)로 한국어 문장 생성 -> 사용자가 일본어로 입력 -> AI 채점.
+// 번역 게임: AI(Gemini/Claude 선택)로 문장 생성 -> 사용자가 반대 언어로 입력 -> AI 채점.
+// 방향을 한국어→일본어(koToJa) / 일본어→한국어(jaToKo) 둘 중 골라서 쓸 수 있다 — 단어장 맞추기의
+// "뜻·읽기 → 한자" / "한자 → 읽기·뜻" 토글과 같은 방식.
 // 단어장을 골라두면(빈칸 채우기와 같은 방식) 매 문제마다 2~7개(단어장 크기에 따라 조절) 단어를
-// 무작위로 뽑아 힌트로 넣어서, 번역하면 자연스럽게 그 단어들을 쓰게 만든다.
+// 무작위로 뽑아 힌트로 넣어서, 번역하면 자연스럽게 그 단어들을 쓰게(혹은 마주치게) 만든다.
 // 단어장이 없으면 AI가 알아서 문장을 만든다.
 import { useEffect, useMemo, useState } from 'react';
 import { Button } from '../components/common/Button';
@@ -16,7 +18,7 @@ import { GrammarPicker } from '../components/grammar/GrammarPicker';
 import { generateTranslateQuestion, gradeTranslation, hasRequiredApiKey } from '../lib/ai/aiClient';
 import { shuffle } from '../lib/wordbank/shuffle';
 import { hasKanji } from '../lib/wordbank/hasKanji';
-import type { TranslateGradeResult, WordEntry } from '../types';
+import type { TranslateDirection, TranslateGradeResult, WordEntry } from '../types';
 
 interface TranslateGamePageProps {
   progress: ProgressController;
@@ -41,6 +43,7 @@ export function TranslateGamePage({ progress, wordBank, onExit }: TranslateGameP
     onExit?.();
   };
 
+  const [direction, setDirection] = useState<TranslateDirection>('koToJa');
   const [pickerOpen, setPickerOpen] = useState(false);
   const [grammarPickerOpen, setGrammarPickerOpen] = useState(false);
   const [wordIndex, setWordIndex] = useState(0);
@@ -48,7 +51,7 @@ export function TranslateGamePage({ progress, wordBank, onExit }: TranslateGameP
   // CSV에 적힌 순서 그대로 반복 출제되지 않도록, 단어장이 (다시) 로드될 때마다 한 번 섞어둔다.
   const shuffledWords = useMemo(() => shuffle(wordBank.words), [wordBank.words]);
 
-  const [koreanSentence, setKoreanSentence] = useState<string | null>(null);
+  const [sourceSentence, setSourceSentence] = useState<string | null>(null);
   // 이번 문제에 힌트로 쓴 단어들 — 채점 후 "이 문제에 쓰인 단어"로 보여주고, 진도 기록에도 쓴다.
   const [questionWords, setQuestionWords] = useState<WordEntry[]>([]);
   const [questionLoading, setQuestionLoading] = useState(false);
@@ -75,8 +78,13 @@ export function TranslateGamePage({ progress, wordBank, onExit }: TranslateGameP
     try {
       const count = randomWordCount(shuffledWords.length);
       const words = Array.from({ length: count }, (_, i) => shuffledWords[(wordIndex + i) % shuffledWords.length]);
-      const generated = await generateTranslateQuestion(config, grammarBank.notes, words.length > 0 ? words : undefined);
-      setKoreanSentence(generated.koreanSentence);
+      const generated = await generateTranslateQuestion(
+        config,
+        grammarBank.notes,
+        direction,
+        words.length > 0 ? words : undefined
+      );
+      setSourceSentence(generated.sourceSentence);
       setQuestionWords(words);
     } catch (e) {
       setQuestionError(e instanceof Error ? e.message : '문제를 불러오지 못했습니다.');
@@ -88,14 +96,14 @@ export function TranslateGamePage({ progress, wordBank, onExit }: TranslateGameP
   useEffect(() => {
     void loadQuestion();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [config, round, wordBank.wordsLoading]);
+  }, [config, round, wordBank.wordsLoading, direction]);
 
   const handleGrade = async () => {
-    if (!answer.trim() || !koreanSentence || !config || !hasRequiredApiKey(config)) return;
+    if (!answer.trim() || !sourceSentence || !config || !hasRequiredApiKey(config)) return;
     setGrading(true);
     setGradeError(null);
     try {
-      const graded = await gradeTranslation(config, koreanSentence, answer.trim());
+      const graded = await gradeTranslation(config, direction, sourceSentence, answer.trim());
       setResult(graded);
       setAnsweredCount((n) => n + 1);
       if (graded.isCorrect) setCorrectCount((n) => n + 1);
@@ -113,6 +121,17 @@ export function TranslateGamePage({ progress, wordBank, onExit }: TranslateGameP
     setWordIndex((i) => i + Math.max(1, questionWords.length));
     setAnswer('');
     setResult(null);
+    setKanaMode('kanji');
+  };
+
+  /** 방향 전환 — 진행 중인 답/입력기 상태를 리셋하고, 방향이 deps에 있는 effect가 바로 새 문제를 만든다. */
+  const handleDirectionChange = (next: TranslateDirection) => {
+    if (next === direction) return;
+    setDirection(next);
+    setAnswer('');
+    setResult(null);
+    setGradeError(null);
+    setHandwritingOpen(false);
     setKanaMode('kanji');
   };
 
@@ -148,6 +167,26 @@ export function TranslateGamePage({ progress, wordBank, onExit }: TranslateGameP
       <div className="flex flex-wrap items-center gap-6">
         <ProgressStat label="맞은 문제" value={correctCount} suffix={`/${answeredCount}`} />
         <ProgressStat label="단어 출처" value={wordBank.words.length > 0 ? '드라이브' : 'AI 생성'} />
+        <div className="flex gap-2">
+          <button
+            type="button"
+            onClick={() => handleDirectionChange('koToJa')}
+            className={`btn btn-sm rounded-[var(--radius-field)] ${
+              direction === 'koToJa' ? 'btn-primary' : 'btn-outline'
+            }`}
+          >
+            한국어 → 일본어
+          </button>
+          <button
+            type="button"
+            onClick={() => handleDirectionChange('jaToKo')}
+            className={`btn btn-sm rounded-[var(--radius-field)] ${
+              direction === 'jaToKo' ? 'btn-primary' : 'btn-outline'
+            }`}
+          >
+            일본어 → 한국어
+          </button>
+        </div>
         <Button variant="ghost" size="sm" onClick={() => setPickerOpen((v) => !v)}>
           {pickerOpen ? '단어장 선택 닫기' : '단어장 선택'}
         </Button>
@@ -209,26 +248,35 @@ export function TranslateGamePage({ progress, wordBank, onExit }: TranslateGameP
         </div>
       )}
 
-      {koreanSentence && !questionLoading && !wordBank.wordsLoading && (
+      {sourceSentence && !questionLoading && !wordBank.wordsLoading && (
         <>
-          <p className="font-body rounded-[var(--radius-box)] border border-base-300 bg-base-100 p-5 text-lg text-base-content">
-            {koreanSentence}
+          <p
+            className={`rounded-[var(--radius-box)] border border-base-300 bg-base-100 p-5 text-lg text-base-content ${
+              direction === 'jaToKo' ? 'font-jp' : 'font-body'
+            }`}
+          >
+            {sourceSentence}
           </p>
 
           <div className="flex flex-col gap-3">
             <label className="flex flex-col gap-1.5">
-              <span className="font-body text-xs text-base-content/60">일본어 번역</span>
+              <span className="font-body text-xs text-base-content/60">
+                {direction === 'koToJa' ? '일본어 번역' : '한국어 번역'}
+              </span>
               <textarea
                 value={answer}
                 onChange={(e) => setAnswer(e.target.value)}
                 disabled={result !== null || grading}
                 rows={3}
-                className="font-jp textarea textarea-bordered w-full rounded-[var(--radius-field)] text-base"
-                placeholder="ここに書いてください"
+                className={`textarea textarea-bordered w-full rounded-[var(--radius-field)] text-base ${
+                  direction === 'koToJa' ? 'font-jp' : 'font-body'
+                }`}
+                placeholder={direction === 'koToJa' ? 'ここに書いてください' : '여기에 한국어로 입력하세요'}
               />
             </label>
 
-            {result === null && (
+            {/* 한자 필기/가나 입력기는 일본어로 답을 쓸 때(koToJa)만 필요하다 — 한국어 답에는 소용없다. */}
+            {result === null && direction === 'koToJa' && (
               <div className="flex flex-col items-center gap-3">
                 <Button variant="ghost" size="sm" onClick={() => setHandwritingOpen((v) => !v)}>
                   {handwritingOpen ? '한자/가나 입력기 닫기' : '✏️ 한자/가나 입력기로 이어 쓰기'}
