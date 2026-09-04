@@ -40,9 +40,15 @@ export function useAppConfig(enabled = true) {
     }
   }, []);
 
+  // 로컬 캐시가 있어도(이 기기에서 예전에 써본 적 있어도) 마운트/enabled 전환 시엔 항상 드라이브의
+  // 최신 config.json을 다시 읽어온다 — 캐시는 그동안 화면이 깜빡이지 않게 초기값으로만 쓴다.
+  // 예전엔 "캐시가 없을 때만" 불러왔는데, 그러면 다른 기기(또는 드라이브에서 직접 수정)에서 API
+  // 키/설정을 바꿔도 이 기기는 최초 1회 캐싱된 값을 영영 그대로 쓰게 되는 문제가 있었다.
   useEffect(() => {
-    if (enabled && !config) void refresh();
-  }, [enabled, config, refresh]);
+    if (!enabled) return;
+    void refresh();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- enabled가 켜질 때마다(마운트 포함) 한 번 새로고침
+  }, [enabled]);
 
   return { config, loading, error, refresh, updateConfig };
 }
