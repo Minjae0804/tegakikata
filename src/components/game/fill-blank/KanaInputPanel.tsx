@@ -11,6 +11,7 @@ import { HandwritingFrame } from '../../handwriting/HandwritingFrame';
 import { CandidateChips } from './CandidateChips';
 import { HiraganaKeyboard } from './HiraganaKeyboard';
 import { KatakanaKeyboard } from './KatakanaKeyboard';
+import { getCached, setCached } from '../../../lib/storage/localCache';
 
 export type KanaInputMode = 'kanji' | 'hiragana' | 'katakana';
 
@@ -19,6 +20,10 @@ const MODE_LABELS: Record<KanaInputMode, string> = {
   hiragana: '히라가나 입력',
   katakana: '가타카나 입력',
 };
+
+// 히라가나/가타카나 버튼 팔레트를 접어둔 상태를 기기에 기억해둔다 — 화면 공간을 많이 차지해서,
+// 한 번 접어두면 새로고침하거나 다른 문제로 넘어가도 계속 접힌 채로 유지되길 바라는 사용자가 많다.
+const KANA_COLLAPSED_CACHE_KEY = 'kanaKeyboardCollapsed';
 
 interface KanaInputPanelProps {
   mode: KanaInputMode;
@@ -31,6 +36,17 @@ interface KanaInputPanelProps {
 export function KanaInputPanel({ mode, onModeChange, onSelect, modes = ['kanji', 'hiragana', 'katakana'] }: KanaInputPanelProps) {
   const [candidates, setCandidates] = useState<string[]>([]);
   const [canvasKey, setCanvasKey] = useState(0);
+  const [kanaCollapsed, setKanaCollapsed] = useState(
+    () => getCached<boolean>(KANA_COLLAPSED_CACHE_KEY) ?? false
+  );
+
+  const toggleKanaCollapsed = () => {
+    setKanaCollapsed((prev) => {
+      const next = !prev;
+      setCached(KANA_COLLAPSED_CACHE_KEY, next);
+      return next;
+    });
+  };
 
   const handleModeChange = (next: KanaInputMode) => {
     if (next === mode) return;
@@ -75,8 +91,23 @@ export function KanaInputPanel({ mode, onModeChange, onSelect, modes = ['kanji',
         </div>
       )}
 
-      {mode === 'hiragana' && <HiraganaKeyboard onSelect={onSelect} />}
-      {mode === 'katakana' && <KatakanaKeyboard onSelect={onSelect} />}
+      {(mode === 'hiragana' || mode === 'katakana') && (
+        <div className="flex w-full flex-col items-center gap-2">
+          <button
+            type="button"
+            onClick={toggleKanaCollapsed}
+            className="font-body flex items-center gap-1 text-xs text-base-content/50 hover:text-base-content/80"
+          >
+            {kanaCollapsed ? '입력기 펼치기 ▾' : '입력기 접기 ▴'}
+          </button>
+          {!kanaCollapsed && (
+            <>
+              {mode === 'hiragana' && <HiraganaKeyboard onSelect={onSelect} />}
+              {mode === 'katakana' && <KatakanaKeyboard onSelect={onSelect} />}
+            </>
+          )}
+        </div>
+      )}
     </div>
   );
 }
